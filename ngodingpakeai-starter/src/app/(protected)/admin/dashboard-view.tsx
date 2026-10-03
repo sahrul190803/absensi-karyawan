@@ -111,6 +111,9 @@ export function DashboardView() {
             <Link href="/admin/hari-libur">Hari libur</Link>
           </Button>
           <Button variant="outline" size="sm" asChild>
+            <Link href="/admin/laporan">Laporan</Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild>
             <Link href="/admin/audit">Audit log</Link>
           </Button>
           <Button variant="outline" size="sm" asChild>
