@@ -381,6 +381,12 @@ export function AttendanceHome({ userName }: { userName: string }) {
               <Button variant="ghost" size="lg" asChild>
                 <Link href="/app/pengajuan">Pengajuan izin/cuti</Link>
               </Button>
+              <Button variant="ghost" size="lg" asChild>
+                <Link href="/app/notifikasi">Notifikasi</Link>
+              </Button>
+              <Button variant="ghost" size="lg" asChild>
+                <Link href="/app/profil">Profil</Link>
+              </Button>
             </div>
             <p className="mt-3 text-xs leading-5 text-muted-foreground">
               Foto diambil langsung dari kamera dan lokasi divalidasi ulang di

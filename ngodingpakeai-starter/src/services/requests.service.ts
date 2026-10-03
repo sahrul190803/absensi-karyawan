@@ -1,7 +1,7 @@
 import "server-only";
 import { and, desc, eq, type SQL } from "drizzle-orm";
 import { db } from "@/db";
-import { auditLogs, requests, user } from "@/db/schema";
+import { auditLogs, notifications, requests, user } from "@/db/schema";
 import { ApiError } from "@/lib/api";
 import type {
   CreateRequestInput,
@@ -156,6 +156,17 @@ export async function decideAnyRequest(
     entity: "requests",
     entityId: id,
     newValue: { status: input.status, note: input.decisionNote },
+  });
+  await db.insert(notifications).values({
+    userId: row.userId,
+    type: `request-${input.status}`,
+    title:
+      input.status === "approved"
+        ? "Pengajuan disetujui"
+        : "Pengajuan ditolak",
+    body:
+      input.decisionNote ||
+      "Buka halaman Pengajuan untuk melihat detail terbaru.",
   });
   return row;
 }

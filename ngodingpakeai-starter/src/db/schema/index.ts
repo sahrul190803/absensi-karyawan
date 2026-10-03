@@ -17,3 +17,4 @@ export * from "./attendance-record";
 export * from "./attendance-photo";
 export * from "./request";
 export * from "./audit-log";
+export * from "./notification";

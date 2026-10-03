@@ -1,7 +1,12 @@
 import "server-only";
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { employees } from "@/db/schema";
+import {
+  departments,
+  employees,
+  positions,
+  workLocations,
+} from "@/db/schema";
 import type { ListQueryInput } from "@/validators/common";
 import type {
   CreateEmployeeInput,
@@ -70,4 +75,27 @@ export async function deleteAnyEmployee(id: string) {
     .where(eq(employees.id, id))
     .returning({ id: employees.id });
   return Boolean(row);
+}
+
+export async function getOwnProfile(userId: string) {
+  const [row] = await db
+    .select({
+      id: employees.id,
+      nik: employees.nik,
+      fullName: employees.fullName,
+      phone: employees.phone,
+      address: employees.address,
+      joinDate: employees.joinDate,
+      employmentStatus: employees.employmentStatus,
+      departmentName: departments.name,
+      positionName: positions.name,
+      locationName: workLocations.name,
+    })
+    .from(employees)
+    .leftJoin(departments, eq(departments.id, employees.departmentId))
+    .leftJoin(positions, eq(positions.id, employees.positionId))
+    .leftJoin(workLocations, eq(workLocations.id, employees.workLocationId))
+    .where(eq(employees.userId, userId))
+    .limit(1);
+  return row ?? null;
 }
