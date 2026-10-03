@@ -88,9 +88,29 @@ export function DashboardView() {
             Rekap absensi {date || "hari ini"} · waktu server WIB
           </p>
         </div>
-        <Button variant="outline" size="sm" asChild>
-          <Link href="/admin/requests">Persetujuan pengajuan</Link>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/admin/requests">Persetujuan</Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/admin/karyawan">Karyawan</Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/admin/departemen">Departemen</Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/admin/jabatan">Jabatan</Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/admin/shift">Shift</Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/admin/lokasi">Lokasi</Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/admin/hari-libur">Hari libur</Link>
+          </Button>
+        </div>
       </div>
 
       {error && (
