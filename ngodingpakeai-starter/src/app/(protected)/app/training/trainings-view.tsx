@@ -11,7 +11,6 @@ type Training = {
   startTime: string;
   endTime: string;
   place: string;
-  departmentName: string | null;
   notes: string;
 };
 
@@ -89,8 +88,7 @@ export function TrainingsView() {
                 {row.endTime.slice(0, 5)}
               </p>
               <p className="mt-1 text-sm text-muted-foreground">
-                {row.place || "Tempat menyusul"} ·{" "}
-                {row.departmentName ?? "Semua departemen"}
+                {row.place || "Tempat menyusul"}
               </p>
               {row.notes && (
                 <p className="mt-2 text-sm leading-6">{row.notes}</p>

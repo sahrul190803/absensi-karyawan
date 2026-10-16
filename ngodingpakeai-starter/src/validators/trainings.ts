@@ -9,7 +9,6 @@ export const trainingQuerySchema = z
     offset: z.coerce.number().int().min(0).max(1_000_000).default(0),
     from: dateOnly.optional(),
     to: dateOnly.optional(),
-    departmentId: z.string().uuid().optional(),
   })
   .strict();
 
@@ -20,8 +19,8 @@ export const trainingCreateSchema = z
     startTime: clockTime,
     endTime: clockTime,
     place: z.string().trim().max(200).default(""),
-    departmentId: z.string().uuid().nullish(),
     notes: z.string().trim().max(500).default(""),
+    employeeIds: z.array(z.string().uuid()).max(500).default([]),
   })
   .strict()
   .refine(
@@ -36,8 +35,8 @@ export const trainingUpdateSchema = z
     startTime: clockTime.optional(),
     endTime: clockTime.optional(),
     place: z.string().trim().max(200).optional(),
-    departmentId: z.string().uuid().nullish(),
     notes: z.string().trim().max(500).optional(),
+    employeeIds: z.array(z.string().uuid()).max(500).optional(),
   })
   .strict()
   .refine((value) => Object.keys(value).length > 0, "Tidak ada perubahan.");

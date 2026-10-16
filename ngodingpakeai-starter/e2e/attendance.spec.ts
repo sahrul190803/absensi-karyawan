@@ -348,7 +348,7 @@ test("GPS di luar radius ditolak", async ({ request }) => {
   expect((await response.json()).error.code).toBe("OUTSIDE_GEOFENCE");
 });
 
-test("koreksi absensi disetujui HR, tercatat audit, dan saldo cuti berkurang", async ({
+test("cuti disetujui mengurangi saldo dan membatalkan alpha", async ({
   browser,
 }) => {
   const employeeContext = await browser.newContext();
@@ -356,65 +356,13 @@ test("koreksi absensi disetujui HR, tercatat audit, dan saldo cuti berkurang", a
   const employee = employeeContext.request;
   const admin = adminContext.request;
   try {
-    const email = await signUp(employee, "Koreksi Karyawan");
-    const employeeId = await createEmployee(email, "Koreksi Karyawan");
-    const adminEmail = await signUp(admin, "Admin Koreksi");
+    const email = await signUp(employee, "Cuti Karyawan");
+    const employeeId = await createEmployee(email, "Cuti Karyawan");
+    const adminEmail = await signUp(admin, "Admin Cuti");
     await setRole(adminEmail, "admin");
 
     const locationId = await createLocation();
     const date = todayInJakarta();
-    const { attendanceId, oldCheckIn } = await withPool(async (client) => {
-      const { rows } = await client.query(
-        "insert into attendance_records (employee_id, work_location_id, date, check_in_time, status) values ($1, $2, $3, now(), 'present') returning id, check_in_time",
-        [employeeId, locationId, date],
-      );
-      return {
-        attendanceId: rows[0].id as string,
-        oldCheckIn: rows[0].check_in_time as Date,
-      };
-    });
-
-    const newCheckIn = new Date(oldCheckIn.getTime() - 60 * 60 * 1000);
-    const correction = await employee.post("/api/corrections", {
-      headers,
-      data: {
-        attendanceId,
-        reason: "Salah jam masuk, harusnya satu jam lebih awal",
-        checkInTime: newCheckIn.toISOString(),
-      },
-    });
-    expect(correction.status()).toBe(201);
-    const correctionId = (await correction.json()).data.id;
-
-    const decide = await admin.patch(`/api/admin/corrections/${correctionId}`, {
-      headers,
-      data: { status: "approved", decisionNote: "Diverifikasi" },
-    });
-    expect(decide.status()).toBe(200);
-
-    const detail = await employee.get(`/api/attendance/${attendanceId}`, {
-      headers,
-    });
-    expect(detail.status()).toBe(200);
-    const detailBody = await detail.json();
-    expect(new Date(detailBody.data.record.checkInTime).getTime()).toBe(
-      newCheckIn.getTime(),
-    );
-
-    const audit = await admin.get(
-      "/api/admin/audit-logs?entity=attendance_records&limit=100",
-      { headers },
-    );
-    expect(audit.status()).toBe(200);
-    const auditBody = await audit.json();
-    expect(
-      auditBody.data.some(
-        (entry: { action: string; entityId: string }) =>
-          entry.action === "correction-approved" &&
-          entry.entityId === attendanceId,
-      ),
-    ).toBe(true);
-
     // Cuti approved: saldo terpakai dan alpha pada tanggal itu dibatalkan.
     await withPool(async (client) => {
       await client.query(

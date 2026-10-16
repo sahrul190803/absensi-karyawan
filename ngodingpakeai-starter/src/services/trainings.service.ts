@@ -1,7 +1,26 @@
 import "server-only";
-import { and, asc, eq, gte, isNull, lte, or, type SQL } from "drizzle-orm";
+import {
+  and,
+  asc,
+  eq,
+  exists,
+  gte,
+  inArray,
+  lte,
+  notExists,
+  or,
+  type SQL,
+} from "drizzle-orm";
 import { db } from "@/db";
-import { auditLogs, companies, departments, employees, trainings } from "@/db/schema";
+import {
+  auditLogs,
+  companies,
+  departments,
+  employees,
+  positions,
+  trainingParticipants,
+  trainings,
+} from "@/db/schema";
 import { ApiError } from "@/lib/api";
 import type {
   TrainingCreateInput,
@@ -16,11 +35,84 @@ const fields = {
   startTime: trainings.startTime,
   endTime: trainings.endTime,
   place: trainings.place,
-  departmentId: trainings.departmentId,
-  departmentName: departments.name,
   notes: trainings.notes,
   createdAt: trainings.createdAt,
   updatedAt: trainings.updatedAt,
+};
+
+type Participant = {
+  employeeId: string;
+  fullName: string;
+  nik: string;
+  departmentName: string | null;
+  positionName: string | null;
+};
+
+const participantsForTrainings = async (trainingIds: string[]) => {
+  const grouped = new Map<string, Participant[]>();
+  if (trainingIds.length === 0) return grouped;
+  const rows = await db
+    .select({
+      trainingId: trainingParticipants.trainingId,
+      employeeId: trainingParticipants.employeeId,
+      fullName: employees.fullName,
+      nik: employees.nik,
+      departmentName: departments.name,
+      positionName: positions.name,
+    })
+    .from(trainingParticipants)
+    .innerJoin(employees, eq(employees.id, trainingParticipants.employeeId))
+    .leftJoin(departments, eq(departments.id, employees.departmentId))
+    .leftJoin(positions, eq(positions.id, employees.positionId))
+    .where(inArray(trainingParticipants.trainingId, trainingIds))
+    .orderBy(asc(employees.fullName));
+  for (const row of rows) {
+    const bucket = grouped.get(row.trainingId) ?? [];
+    bucket.push({
+      employeeId: row.employeeId,
+      fullName: row.fullName,
+      nik: row.nik,
+      departmentName: row.departmentName,
+      positionName: row.positionName,
+    });
+    grouped.set(row.trainingId, bucket);
+  }
+  return grouped;
+};
+
+const withParticipants = async <T extends { id: string }>(rows: T[]) => {
+  const grouped = await participantsForTrainings(rows.map((row) => row.id));
+  return rows.map((row) => ({
+    ...row,
+    participants: grouped.get(row.id) ?? [],
+  }));
+};
+
+const getTrainingRow = async (id: string) => {
+  const [row] = await db
+    .select(fields)
+    .from(trainings)
+    .where(eq(trainings.id, id))
+    .limit(1);
+  if (!row) return undefined;
+  const [withList] = await withParticipants([row]);
+  return withList;
+};
+
+const normalizeEmployeeIds = async (employeeIds: string[]) => {
+  const unique = [...new Set(employeeIds)];
+  if (unique.length === 0) return unique;
+  const rows = await db
+    .select({ id: employees.id })
+    .from(employees)
+    .where(inArray(employees.id, unique));
+  if (rows.length !== unique.length)
+    throw new ApiError(
+      404,
+      "NOT_FOUND",
+      "Ada karyawan yang tidak ditemukan pada daftar peserta.",
+    );
+  return unique;
 };
 
 const dateInTimezone = (timeZone: string, value: Date) =>
@@ -31,44 +123,23 @@ const dateInTimezone = (timeZone: string, value: Date) =>
     day: "2-digit",
   }).format(value);
 
-const getTrainingRow = async (id: string) => {
-  const [row] = await db
-    .select(fields)
-    .from(trainings)
-    .leftJoin(departments, eq(departments.id, trainings.departmentId))
-    .where(eq(trainings.id, id))
-    .limit(1);
-  return row;
-};
-
-const assertDepartment = async (departmentId: string) => {
-  const [department] = await db
-    .select({ id: departments.id })
-    .from(departments)
-    .where(eq(departments.id, departmentId))
-    .limit(1);
-  if (!department)
-    throw new ApiError(404, "NOT_FOUND", "Departemen tidak ditemukan.");
-};
-
 export async function listAnyTrainings(query: TrainingQueryInput) {
   const conditions: SQL[] = [];
   if (query.from) conditions.push(gte(trainings.date, query.from));
   if (query.to) conditions.push(lte(trainings.date, query.to));
-  if (query.departmentId)
-    conditions.push(eq(trainings.departmentId, query.departmentId));
 
   const rows = await db
     .select(fields)
     .from(trainings)
-    .leftJoin(departments, eq(departments.id, trainings.departmentId))
     .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(asc(trainings.date), asc(trainings.startTime))
     .limit(query.limit + 1)
     .offset(query.offset);
 
+  const data = await withParticipants(rows.slice(0, query.limit));
+
   return {
-    data: rows.slice(0, query.limit),
+    data,
     meta: {
       limit: query.limit,
       offset: query.offset,
@@ -77,9 +148,11 @@ export async function listAnyTrainings(query: TrainingQueryInput) {
   };
 }
 
+// Jadwal untuk satu karyawan: training tanpa peserta (semua karyawan) atau
+// training yang mencantumkan karyawan ini sebagai peserta.
 export async function listOwnTrainings(userId: string) {
   const [employee] = await db
-    .select({ id: employees.id, departmentId: employees.departmentId })
+    .select({ id: employees.id })
     .from(employees)
     .where(eq(employees.userId, userId))
     .limit(1);
@@ -96,18 +169,33 @@ export async function listOwnTrainings(userId: string) {
     .limit(1);
   const today = dateInTimezone(company?.timezone ?? "Asia/Jakarta", new Date());
 
-  const scope = employee.departmentId
-    ? or(
-        isNull(trainings.departmentId),
-        eq(trainings.departmentId, employee.departmentId),
-      )
-    : isNull(trainings.departmentId);
-
   const rows = await db
     .select(fields)
     .from(trainings)
-    .leftJoin(departments, eq(departments.id, trainings.departmentId))
-    .where(and(gte(trainings.date, today), scope))
+    .where(
+      and(
+        gte(trainings.date, today),
+        or(
+          notExists(
+            db
+              .select({ id: trainingParticipants.id })
+              .from(trainingParticipants)
+              .where(eq(trainingParticipants.trainingId, trainings.id)),
+          ),
+          exists(
+            db
+              .select({ id: trainingParticipants.id })
+              .from(trainingParticipants)
+              .where(
+                and(
+                  eq(trainingParticipants.trainingId, trainings.id),
+                  eq(trainingParticipants.employeeId, employee.id),
+                ),
+              ),
+          ),
+        ),
+      ),
+    )
     .orderBy(asc(trainings.date), asc(trainings.startTime))
     .limit(50);
 
@@ -118,34 +206,48 @@ export async function createAnyTraining(
   actorId: string,
   input: TrainingCreateInput,
 ) {
-  if (input.departmentId) await assertDepartment(input.departmentId);
-  const [row] = await db
-    .insert(trainings)
-    .values({
-      title: input.title,
-      date: input.date,
-      startTime: input.startTime,
-      endTime: input.endTime,
-      place: input.place,
-      departmentId: input.departmentId ?? null,
-      notes: input.notes,
-      createdBy: actorId,
-    })
-    .returning({ id: trainings.id });
+  const employeeIds = await normalizeEmployeeIds(input.employeeIds);
+  const trainingId = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .insert(trainings)
+      .values({
+        title: input.title,
+        date: input.date,
+        startTime: input.startTime,
+        endTime: input.endTime,
+        place: input.place,
+        notes: input.notes,
+        createdBy: actorId,
+      })
+      .returning({ id: trainings.id });
+    if (employeeIds.length > 0) {
+      await tx.insert(trainingParticipants).values(
+        employeeIds.map((employeeId) => ({
+          trainingId: row.id,
+          employeeId,
+        })),
+      );
+    }
+    return row.id;
+  });
+
   await db.insert(auditLogs).values({
     userId: actorId,
     action: "training-create",
     entity: "trainings",
-    entityId: row.id,
+    entityId: trainingId,
     newValue: {
       title: input.title,
       date: input.date,
       startTime: input.startTime,
       endTime: input.endTime,
-      departmentId: input.departmentId ?? null,
+      employeeIds,
     },
   });
-  return getTrainingRow(row.id);
+  const created = await getTrainingRow(trainingId);
+  if (!created)
+    throw new ApiError(500, "INTERNAL", "Training gagal dimuat ulang.");
+  return created;
 }
 
 export async function updateAnyTraining(
@@ -155,22 +257,38 @@ export async function updateAnyTraining(
 ) {
   const existing = await getTrainingRow(id);
   if (!existing) throw new ApiError(404, "NOT_FOUND", "Training tidak ditemukan.");
-  if (input.departmentId) await assertDepartment(input.departmentId);
+  const employeeIds =
+    input.employeeIds !== undefined
+      ? await normalizeEmployeeIds(input.employeeIds)
+      : undefined;
 
-  await db
-    .update(trainings)
-    .set({
-      ...(input.title !== undefined ? { title: input.title } : {}),
-      ...(input.date !== undefined ? { date: input.date } : {}),
-      ...(input.startTime !== undefined ? { startTime: input.startTime } : {}),
-      ...(input.endTime !== undefined ? { endTime: input.endTime } : {}),
-      ...(input.place !== undefined ? { place: input.place } : {}),
-      ...(input.departmentId !== undefined
-        ? { departmentId: input.departmentId ?? null }
-        : {}),
-      ...(input.notes !== undefined ? { notes: input.notes } : {}),
-    })
-    .where(eq(trainings.id, id));
+  await db.transaction(async (tx) => {
+    await tx
+      .update(trainings)
+      .set({
+        ...(input.title !== undefined ? { title: input.title } : {}),
+        ...(input.date !== undefined ? { date: input.date } : {}),
+        ...(input.startTime !== undefined ? { startTime: input.startTime } : {}),
+        ...(input.endTime !== undefined ? { endTime: input.endTime } : {}),
+        ...(input.place !== undefined ? { place: input.place } : {}),
+        ...(input.notes !== undefined ? { notes: input.notes } : {}),
+      })
+      .where(eq(trainings.id, id));
+
+    if (employeeIds !== undefined) {
+      await tx
+        .delete(trainingParticipants)
+        .where(eq(trainingParticipants.trainingId, id));
+      if (employeeIds.length > 0) {
+        await tx.insert(trainingParticipants).values(
+          employeeIds.map((employeeId) => ({
+            trainingId: id,
+            employeeId,
+          })),
+        );
+      }
+    }
+  });
 
   await db.insert(auditLogs).values({
     userId: actorId,
@@ -182,11 +300,14 @@ export async function updateAnyTraining(
       date: existing.date,
       startTime: existing.startTime,
       endTime: existing.endTime,
-      departmentId: existing.departmentId,
+      employeeIds: existing.participants.map((row) => row.employeeId),
     },
     newValue: input,
   });
-  return getTrainingRow(id);
+  const updated = await getTrainingRow(id);
+  if (!updated)
+    throw new ApiError(500, "INTERNAL", "Training gagal dimuat ulang.");
+  return updated;
 }
 
 export async function deleteAnyTraining(actorId: string, id: string) {
@@ -201,7 +322,7 @@ export async function deleteAnyTraining(actorId: string, id: string) {
     oldValue: {
       title: existing.title,
       date: existing.date,
-      departmentId: existing.departmentId,
+      employeeIds: existing.participants.map((row) => row.employeeId),
     },
   });
   return { id };

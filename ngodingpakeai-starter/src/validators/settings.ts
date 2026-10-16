@@ -14,6 +14,9 @@ export const updateSettingsSchema = z
       .max(120)
       .optional(),
     payday: z.coerce.number().int().min(1).max(28).optional(),
+    faceVerificationEnabled: z.boolean().optional(),
+    faceSimilarityThreshold: z.coerce.number().int().min(1).max(100).optional(),
+    faceLivenessRequired: z.boolean().optional(),
   })
   .strict()
   .refine(

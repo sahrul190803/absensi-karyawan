@@ -35,6 +35,7 @@ import {
 import { cn } from "cn";
 import { authClient } from "@/lib/auth-client";
 import { Brand } from "@/components/brand";
+import { NotificationBell } from "@/components/notification-bell";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
   GROUP_LABELS,
@@ -72,7 +73,7 @@ const ICONS: Record<NavIcon, LucideIcon> = {
 const MANAGER_MOBILE_TABS = [
   "/admin",
   "/admin/jadwal",
-  "/admin/izin-cuti",
+  "/admin/makan",
   "/admin/laporan",
 ];
 
@@ -204,6 +205,8 @@ export function AppShell({
   }, [menuOpen]);
 
   const managerMode = items.some((item) => item.href === "/admin");
+  // Hanya akun dengan area karyawan yang punya halaman notifikasi.
+  const showNotifications = items.some((item) => item.href === "/app");
   const tabHrefs = managerMode ? MANAGER_MOBILE_TABS : MOBILE_TAB_HREFS;
   const tabItems = tabHrefs
     .map((href) => items.find((item) => item.href === href))
@@ -240,13 +243,7 @@ export function AppShell({
         <Brand className="min-w-0 [&>span:last-child>span:last-child]:hidden" />
         <span className="flex items-center gap-2">
           <ThemeToggle />
-          <Link
-            href="/app/notifikasi"
-          className="grid size-9 place-items-center rounded-md border border-border bg-card text-muted-foreground"
-          aria-label="Notifikasi"
-        >
-            <Bell className="size-4" aria-hidden="true" />
-          </Link>
+          {showNotifications && <NotificationBell />}
         </span>
       </header>
 
@@ -307,7 +304,12 @@ export function AppShell({
           aria-label="Navigasi cepat"
           className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-card pb-[env(safe-area-inset-bottom)] lg:hidden"
         >
-          <ul className="mx-auto grid max-w-xl grid-cols-5">
+          <ul
+            className="mx-auto grid max-w-xl"
+            style={{
+              gridTemplateColumns: `repeat(${tabItems.length}, minmax(0, 1fr))`,
+            }}
+          >
             {tabItems.map((item) => {
               const Icon = ICONS[item.icon];
               const active = isActive(pathname, item);

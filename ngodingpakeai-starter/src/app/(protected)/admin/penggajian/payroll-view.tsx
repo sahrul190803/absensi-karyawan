@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 type Period = {
@@ -10,6 +11,7 @@ type Period = {
   status: string;
   note: string;
   finalizedAt: string | null;
+  paidAt: string | null;
   employeeCount: number;
   total: number;
 };
@@ -45,6 +47,7 @@ type Detail = {
     status: string;
     note: string;
     finalizedAt: string | null;
+    paidAt: string | null;
   };
   entries: Entry[];
   meta: {
@@ -59,16 +62,17 @@ type Detail = {
   };
 };
 
-type FinanceSummary = {
-  income: { label: string; amount: number }[];
-  expense: { label: string; amount: number }[];
-  incomeTotal: number;
-  expenseTotal: number;
-  net: number;
-  margin: number;
-  from: string;
-  to: string;
+type EmployeeRow = {
+  id: string;
+  fullName: string;
+  nik: string;
+  departmentId: string | null;
+  employmentStatus: string;
+  salaryType: string;
+  baseSalary: string;
 };
+
+type DepartmentRow = { id: string; name: string };
 
 const rupiah = new Intl.NumberFormat("id-ID", {
   style: "currency",
@@ -94,6 +98,12 @@ const MONTHS = [
 const monthLabel = (year: number, month: number) =>
   `${MONTHS[month - 1] ?? month} ${year}`;
 
+const STATUS_LABELS: Record<string, string> = {
+  draft: "Draft",
+  finalized: "Final",
+  paid: "Dibayar",
+};
+
 export function PayrollView() {
   const [periods, setPeriods] = useState<Period[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -111,6 +121,13 @@ export function PayrollView() {
   const [adjustmentNote, setAdjustmentNote] = useState("");
   const [entrySearch, setEntrySearch] = useState("");
   const [entryDepartment, setEntryDepartment] = useState("");
+
+  const [employees, setEmployees] = useState<EmployeeRow[]>([]);
+  const [departments, setDepartments] = useState<DepartmentRow[]>([]);
+  const [salarySearch, setSalarySearch] = useState("");
+  const [salaryEditingId, setSalaryEditingId] = useState<string | null>(null);
+  const [salaryType, setSalaryType] = useState("monthly");
+  const [salaryAmount, setSalaryAmount] = useState("");
 
   const loadPeriods = useCallback(async () => {
     try {
@@ -131,27 +148,20 @@ export function PayrollView() {
     }
   }, []);
 
-  const [finance, setFinance] = useState<FinanceSummary | null>(null);
-  const [financeLoading, setFinanceLoading] = useState(true);
-
-  const loadFinance = useCallback(async () => {
+  const loadSalary = useCallback(async () => {
     try {
-      const response = await fetch("/api/admin/finance/summary?period=month", {
-        cache: "no-store",
-      });
-      const body = await response.json();
-      if (response.ok) setFinance(body.data);
+      const [employeeResponse, departmentResponse] = await Promise.all([
+        fetch("/api/employees?limit=200", { cache: "no-store" }),
+        fetch("/api/departments?limit=200", { cache: "no-store" }),
+      ]);
+      const employeeBody = await employeeResponse.json();
+      const departmentBody = await departmentResponse.json();
+      if (employeeResponse.ok) setEmployees(employeeBody.data ?? []);
+      if (departmentResponse.ok) setDepartments(departmentBody.data ?? []);
     } catch {
-      // kartu keuangan opsional: gagal memuat cukup dibiarkan kosong
-    } finally {
-      setFinanceLoading(false);
+      // Bagian pengaturan gaji opsional; kegagalan diabaikan.
     }
   }, []);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => void loadFinance(), 0);
-    return () => window.clearTimeout(timer);
-  }, [loadFinance]);
 
   const loadDetail = useCallback(async (id: string) => {
     try {
@@ -178,13 +188,36 @@ export function PayrollView() {
   }, [loadPeriods]);
 
   useEffect(() => {
+    const timer = window.setTimeout(() => void loadSalary(), 0);
+    return () => window.clearTimeout(timer);
+  }, [loadSalary]);
+
+  useEffect(() => {
     if (!selectedId) return;
     const timer = window.setTimeout(() => void loadDetail(selectedId), 0);
     return () => window.clearTimeout(timer);
   }, [loadDetail, selectedId]);
 
-  // Filter daftar karyawan pada detail periode: cari nama/NIK atau divisi.
-  const departments = useMemo(() => {
+  const departmentNames = useMemo(
+    () => new Map(departments.map((row) => [row.id, row.name])),
+    [departments],
+  );
+
+  const salaryRows = useMemo(() => {
+    const query = salarySearch.trim().toLowerCase();
+    return employees
+      .filter((employee) => employee.employmentStatus === "active")
+      .filter((employee) =>
+        query.length === 0
+          ? true
+          : `${employee.fullName} ${employee.nik}`
+              .toLowerCase()
+              .includes(query),
+      )
+      .sort((a, b) => a.fullName.localeCompare(b.fullName, "id-ID"));
+  }, [employees, salarySearch]);
+
+  const departments_ = useMemo(() => {
     const names = new Set<string>();
     for (const entry of detail?.entries ?? []) {
       if (entry.departmentName) names.add(entry.departmentName);
@@ -236,12 +269,14 @@ export function PayrollView() {
     }
   };
 
-  const changeStatus = async (status: "draft" | "finalized") => {
+  const changeStatus = async (status: "draft" | "finalized" | "paid") => {
     if (!detail) return;
     const label =
-      status === "finalized"
-        ? "Finalkan periode ini? Nilai akan terkunci."
-        : "Buka kembali periode ini agar bisa diubah?";
+      status === "paid"
+        ? `Bayar gaji periode ${monthLabel(detail.period.year, detail.period.month)}? Semua karyawan akan menerima notifikasi gaji dibayar.`
+        : status === "finalized"
+          ? "Finalkan periode ini? Nilai akan terkunci."
+          : "Buka kembali periode ini agar bisa diubah?";
     if (!window.confirm(label)) return;
     setBusy(true);
     setNotice(null);
@@ -260,9 +295,11 @@ export function PayrollView() {
         return;
       }
       setNotice(
-        status === "finalized"
-          ? "Periode difinalkan."
-          : "Periode dibuka kembali sebagai draft.",
+        status === "paid"
+          ? "Gaji dibayarkan. Notifikasi terkirim ke karyawan."
+          : status === "finalized"
+            ? "Periode difinalkan."
+            : "Periode dibuka kembali sebagai draft.",
       );
       await Promise.all([loadPeriods(), loadDetail(detail.period.id)]);
     } catch {
@@ -310,11 +347,49 @@ export function PayrollView() {
     }
   };
 
-  const isDraft = detail?.period.status === "draft";
+  const openSalary = (employee: EmployeeRow) => {
+    setSalaryEditingId(employee.id);
+    setSalaryType(employee.salaryType);
+    setSalaryAmount(String(Number(employee.baseSalary)));
+    setNotice(null);
+    setError(null);
+  };
 
-  const financeSalary = finance?.expense.find((entry) =>
-    entry.label.toLowerCase().startsWith("gaji"),
-  );
+  const saveSalary = async () => {
+    if (!salaryEditingId) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const response = await fetch(`/api/employees/${salaryEditingId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          salaryType,
+          baseSalary: Number(salaryAmount || "0"),
+        }),
+      });
+      const body = await response.json();
+      if (!response.ok) {
+        setError(
+          body?.error?.details?.[0]?.message ??
+            body?.error?.message ??
+            "Gagal menyimpan gaji karyawan.",
+        );
+        return;
+      }
+      setNotice("Pengaturan gaji disimpan.");
+      setSalaryEditingId(null);
+      await loadSalary();
+    } catch {
+      setError("Jaringan bermasalah. Coba lagi.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const isDraft = detail?.period.status === "draft";
+  const isFinalized = detail?.period.status === "finalized";
+  const isPaid = detail?.period.status === "paid";
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -323,67 +398,10 @@ export function PayrollView() {
           Penggajian
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Hitung draft gaji dari absensi, lembur, dan klaim makan. HRD dapat
-          menyesuaikan sebelum difinalkan.
+          Atur gaji pokok karyawan, hitung periode dari absensi, lalu bayarkan.
+          Karyawan otomatis menerima notifikasi setelah gaji dibayar.
         </p>
       </div>
-
-      <section
-        aria-label="Rincian keuangan periode"
-        className="mt-6 grid gap-4 sm:grid-cols-3"
-      >
-        <div className="rounded-lg border bg-card p-4 shadow-[inset_4px_0_0_0_#137A4A]">
-          <p className="text-sm font-semibold text-muted-foreground">
-            Pemasukan bulan ini
-          </p>
-          <p className="mt-2 font-mono text-xl font-medium">
-            {financeLoading
-              ? "…"
-              : finance
-                ? rupiah.format(finance.incomeTotal)
-                : "—"}
-          </p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {finance
-              ? `${finance.income.length} sumber · ${finance.from} s/d ${finance.to}`
-              : "Belum ada catatan keuangan"}
-          </p>
-        </div>
-        <div className="rounded-lg border bg-card p-4 shadow-[inset_4px_0_0_0_#A65D00]">
-          <p className="text-sm font-semibold text-muted-foreground">
-            Pengeluaran bulan ini
-          </p>
-          <p className="mt-2 font-mono text-xl font-medium">
-            {financeLoading
-              ? "…"
-              : finance
-                ? rupiah.format(finance.expenseTotal)
-                : "—"}
-          </p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {financeSalary
-              ? `termasuk ${financeSalary.label.toLowerCase()} ${rupiah.format(financeSalary.amount)}`
-              : "belum termasuk gaji periode ini"}
-          </p>
-        </div>
-        <div className="rounded-lg border bg-card p-4 shadow-[inset_4px_0_0_0_#E4F222]">
-          <p className="text-sm font-semibold text-muted-foreground">
-            Laba bersih bulan ini
-          </p>
-          <p className="mt-2 font-mono text-xl font-medium">
-            {financeLoading
-              ? "…"
-              : finance
-                ? rupiah.format(finance.net)
-                : "—"}
-          </p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {finance
-              ? `margin ${finance.margin}% · rincian penuh di halaman Laporan`
-              : "Rincian penuh di halaman Laporan"}
-          </p>
-        </div>
-      </section>
 
       {notice && (
         <p role="status" className="mt-4 rounded-lg border bg-card px-4 py-3 text-sm">
@@ -398,6 +416,128 @@ export function PayrollView() {
           {error}
         </p>
       )}
+
+      <section className="mt-6 rounded-lg border bg-card p-5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-lg font-semibold">Gaji karyawan</h2>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              Gaji pokok dan tipe upah yang dipakai saat menghitung periode.
+            </p>
+          </div>
+          <input
+            type="search"
+            value={salarySearch}
+            onChange={(event) => setSalarySearch(event.target.value)}
+            placeholder="Cari nama atau NIK…"
+            aria-label="Cari karyawan"
+            className="h-9 w-52 rounded-md border border-border bg-card px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
+          />
+        </div>
+
+        {salaryRows.length === 0 ? (
+          <div className="mt-4 rounded-lg border border-dashed px-4 py-8 text-center">
+            <Wallet
+              className="mx-auto size-6 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <p className="mt-2 text-sm text-muted-foreground">
+              Belum ada karyawan aktif.
+            </p>
+          </div>
+        ) : (
+          <ul className="mt-4 grid gap-2">
+            {salaryRows.map((employee) => (
+              <li key={employee.id} className="rounded-lg border p-3">
+                {salaryEditingId === employee.id ? (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="grid gap-1.5 text-sm sm:col-span-2">
+                      <span className="font-medium">
+                        {employee.fullName}
+                        <span className="ml-2 font-mono text-xs font-normal text-muted-foreground">
+                          {employee.nik}
+                        </span>
+                      </span>
+                    </label>
+                    <label className="grid gap-1.5 text-sm">
+                      <span className="font-medium">Tipe gaji</span>
+                      <select
+                        className="h-9 w-full rounded-md border border-border bg-card px-2 text-sm"
+                        value={salaryType}
+                        onChange={(event) => setSalaryType(event.target.value)}
+                      >
+                        <option value="monthly">Bulanan</option>
+                        <option value="daily">Harian</option>
+                      </select>
+                    </label>
+                    <label className="grid gap-1.5 text-sm">
+                      <span className="font-medium">
+                        {salaryType === "daily"
+                          ? "Gaji harian (Rp)"
+                          : "Gaji pokok (Rp)"}
+                      </span>
+                      <input
+                        type="number"
+                        min={0}
+                        step="any"
+                        className="h-9 w-full rounded-md border border-border bg-card px-3 text-sm"
+                        value={salaryAmount}
+                        onChange={(event) =>
+                          setSalaryAmount(event.target.value)
+                        }
+                      />
+                    </label>
+                    <div className="flex gap-2 sm:col-span-2">
+                      <Button
+                        size="sm"
+                        disabled={busy}
+                        onClick={() => void saveSalary()}
+                      >
+                        {busy ? "Menyimpan…" : "Simpan"}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={busy}
+                        onClick={() => setSalaryEditingId(null)}
+                      >
+                        Batal
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">
+                        {employee.fullName}
+                        <span className="ml-2 font-mono text-xs font-normal text-muted-foreground">
+                          {employee.nik}
+                        </span>
+                      </p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {employee.departmentId
+                          ? (departmentNames.get(employee.departmentId) ?? "—")
+                          : "—"}{" "}
+                        ·{" "}
+                        {employee.salaryType === "daily" ? "Harian" : "Bulanan"}{" "}
+                        · {rupiah.format(Number(employee.baseSalary))}
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => openSalary(employee)}
+                    >
+                      Ubah gaji
+                    </Button>
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <section className="mt-6 rounded-lg border bg-card p-5">
         <h2 className="text-lg font-semibold">Hitung periode</h2>
@@ -477,9 +617,7 @@ export function PayrollView() {
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="rounded-full border px-2.5 py-0.5 text-xs font-medium">
-                      {period.status === "finalized"
-                        ? "Final"
-                        : "Draft"}
+                      {STATUS_LABELS[period.status] ?? period.status}
                     </span>
                     <Button
                       variant="outline"
@@ -512,9 +650,19 @@ export function PayrollView() {
                 {detail.meta.totals.alphaDays} · lembur{" "}
                 {detail.meta.totals.overtimeMinutes} menit
               </p>
+              {isPaid && detail.period.paidAt && (
+                <p className="mt-1 text-sm font-medium text-positive">
+                  Gaji sudah dibayar pada{" "}
+                  {new Date(detail.period.paidAt).toLocaleDateString("id-ID", {
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                  })}
+                </p>
+              )}
             </div>
             <div className="flex flex-wrap gap-2">
-              {isDraft ? (
+              {isDraft && (
                 <Button
                   size="sm"
                   disabled={busy}
@@ -522,15 +670,25 @@ export function PayrollView() {
                 >
                   Finalkan
                 </Button>
-              ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={busy}
-                  onClick={() => void changeStatus("draft")}
-                >
-                  Buka kembali
-                </Button>
+              )}
+              {isFinalized && (
+                <>
+                  <Button
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => void changeStatus("paid")}
+                  >
+                    Bayar gaji
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => void changeStatus("draft")}
+                  >
+                    Buka kembali
+                  </Button>
+                </>
               )}
               <Button variant="outline" size="sm" asChild>
                 <a
@@ -555,6 +713,13 @@ export function PayrollView() {
               </Button>
             </div>
           </div>
+
+          {isFinalized && (
+            <p className="mt-3 rounded-md border border-border-strong bg-primary-quiet px-3 py-2 text-sm text-foreground">
+              Periode sudah final. Klik &quot;Bayar gaji&quot; untuk membayarkan
+              dan mengirim notifikasi ke semua karyawan.
+            </p>
+          )}
 
           {editingId && (
             <div className="mt-4 grid gap-3 rounded-lg border bg-muted/40 p-4 sm:grid-cols-2">
@@ -617,7 +782,7 @@ export function PayrollView() {
               className="h-9 rounded-md border border-border bg-card px-2 text-sm text-foreground"
             >
               <option value="">Semua divisi</option>
-              {departments.map((name) => (
+              {departments_.map((name) => (
                 <option key={name} value={name}>
                   {name}
                 </option>

@@ -1,7 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { LoaderCircle } from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
+import { Camera, LoaderCircle, ScanFace } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,6 +48,15 @@ type Device = {
   trusted: boolean;
   lastLoginAt: string | null;
   createdAt: string;
+};
+
+type FaceStatus = {
+  enabled: boolean;
+  providerConfigured: boolean;
+  enrolled: boolean;
+  consentAt: string | null;
+  similarityThreshold: number;
+  livenessRequired: boolean;
 };
 
 const statusLabels: Record<string, string> = {
@@ -92,6 +107,15 @@ export function ProfileView({
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileNotice, setProfileNotice] = useState<string | null>(null);
   const [profileError, setProfileError] = useState<string | null>(null);
+  const [face, setFace] = useState<FaceStatus | null>(null);
+  const [faceBusy, setFaceBusy] = useState(false);
+  const [faceError, setFaceError] = useState<string | null>(null);
+  const [faceNotice, setFaceNotice] = useState<string | null>(null);
+  const [faceCameraOpen, setFaceCameraOpen] = useState(false);
+  const [facePhoto, setFacePhoto] = useState<string | null>(null);
+  const [faceConsent, setFaceConsent] = useState(false);
+  const faceVideoRef = useRef<HTMLVideoElement | null>(null);
+  const faceStreamRef = useRef<MediaStream | null>(null);
 
   async function onRevokeDevice(id: string) {
     if (deviceBusy) return;
@@ -148,11 +172,12 @@ export function ProfileView({
 
   const load = useCallback(async () => {
     try {
-      const [profileResponse, balanceResponse, deviceResponse] =
+      const [profileResponse, balanceResponse, deviceResponse, faceResponse] =
         await Promise.all([
           fetch("/api/profile", { cache: "no-store" }),
           fetch("/api/leave-balances", { cache: "no-store" }),
           fetch("/api/devices", { cache: "no-store" }),
+          fetch("/api/face/enrollment", { cache: "no-store" }),
         ]);
       const body = await profileResponse.json();
       if (!profileResponse.ok) {
@@ -167,6 +192,10 @@ export function ProfileView({
       if (deviceResponse.ok) {
         const deviceBody = await deviceResponse.json();
         setDevices(deviceBody.data ?? []);
+      }
+      if (faceResponse.ok) {
+        const faceBody = await faceResponse.json();
+        setFace(faceBody.data ?? null);
       }
       setError(null);
     } catch {
@@ -267,6 +296,128 @@ export function ProfileView({
       setProfileError("Tidak dapat menghubungi server.");
     } finally {
       setSavingProfile(false);
+    }
+  };
+
+  const stopFaceCamera = useCallback(() => {
+    faceStreamRef.current?.getTracks().forEach((track) => track.stop());
+    faceStreamRef.current = null;
+    if (faceVideoRef.current) faceVideoRef.current.srcObject = null;
+  }, []);
+
+  useEffect(() => stopFaceCamera, [stopFaceCamera]);
+
+  const openFaceCamera = async () => {
+    setFaceError(null);
+    setFaceNotice(null);
+    setFacePhoto(null);
+    setFaceConsent(false);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user", width: { ideal: 1280 } },
+        audio: false,
+      });
+      faceStreamRef.current = stream;
+      setFaceCameraOpen(true);
+    } catch (caught) {
+      let reason = "Kamera tidak dapat diakses.";
+      if (caught instanceof Error) {
+        if (caught.name === "NotAllowedError") {
+          reason =
+            "Izin kamera ditolak. Aktifkan kamera untuk mendaftarkan wajah.";
+        } else if (caught.message) {
+          reason = caught.message;
+        }
+      }
+      setFaceError(reason);
+    }
+  };
+
+  useEffect(() => {
+    if (faceCameraOpen && faceVideoRef.current && faceStreamRef.current) {
+      faceVideoRef.current.srcObject = faceStreamRef.current;
+      void faceVideoRef.current.play();
+    }
+  }, [faceCameraOpen]);
+
+  const captureFacePhoto = () => {
+    const video = faceVideoRef.current;
+    if (!video) return;
+    const maxWidth = 640;
+    const scale = Math.min(1, maxWidth / (video.videoWidth || maxWidth));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round((video.videoWidth || maxWidth) * scale);
+    canvas.height = Math.round((video.videoHeight || maxWidth) * scale);
+    const context = canvas.getContext("2d");
+    if (!context) return;
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    setFacePhoto(canvas.toDataURL("image/jpeg", 0.8));
+  };
+
+  const closeFaceCamera = () => {
+    stopFaceCamera();
+    setFaceCameraOpen(false);
+    setFacePhoto(null);
+    setFaceConsent(false);
+  };
+
+  const submitFace = async () => {
+    if (!facePhoto || !faceConsent || faceBusy) return;
+    setFaceBusy(true);
+    setFaceError(null);
+    try {
+      const response = await fetch("/api/face/enrollment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ photo: facePhoto, consent: true }),
+      });
+      const body = await response.json();
+      if (!response.ok) {
+        setFaceError(
+          body?.error?.details?.[0]?.message ??
+            body?.error?.message ??
+            "Pendaftaran wajah gagal disimpan.",
+        );
+        return;
+      }
+      setFace(body.data);
+      closeFaceCamera();
+      setFaceNotice(
+        "Wajah terdaftar. Verifikasi wajah akan dipakai saat Anda absen.",
+      );
+    } catch {
+      setFaceError("Tidak dapat menghubungi server.");
+    } finally {
+      setFaceBusy(false);
+    }
+  };
+
+  const revokeFaceData = async () => {
+    if (faceBusy) return;
+    if (
+      !window.confirm(
+        "Cabut data wajah? Absen dengan verifikasi wajah tidak akan berlaku sampai Anda mendaftar ulang.",
+      )
+    )
+      return;
+    setFaceBusy(true);
+    setFaceError(null);
+    setFaceNotice(null);
+    try {
+      const response = await fetch("/api/face/enrollment", {
+        method: "DELETE",
+      });
+      const body = await response.json();
+      if (!response.ok) {
+        setFaceError(body?.error?.message ?? "Gagal mencabut data wajah.");
+        return;
+      }
+      setFace(body.data);
+      setFaceNotice("Data wajah dicabut.");
+    } catch {
+      setFaceError("Tidak dapat menghubungi server.");
+    } finally {
+      setFaceBusy(false);
     }
   };
 
@@ -616,6 +767,87 @@ export function ProfileView({
             </ul>
           )}
 
+          {face && (face.enabled || face.enrolled) && (
+            <section aria-labelledby="wajah-title">
+              <h2 id="wajah-title" className="mt-8 text-lg font-semibold">
+                Verifikasi wajah
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {face.enabled
+                  ? "Perusahaan mewajibkan verifikasi wajah saat absen. Daftarkan wajah Anda di sini."
+                  : "Verifikasi wajah sedang tidak diwajibkan, tetapi data wajah Anda tersimpan dan bisa dicabut kapan saja."}
+              </p>
+
+              {faceNotice && (
+                <p
+                  role="status"
+                  className="mt-3 rounded-lg border bg-card px-4 py-3 text-sm"
+                >
+                  {faceNotice}
+                </p>
+              )}
+              {faceError && (
+                <p
+                  role="alert"
+                  className="mt-3 rounded-lg border border-danger/40 bg-card px-4 py-3 text-sm text-danger"
+                >
+                  {faceError}
+                </p>
+              )}
+              {face.enabled && !face.providerConfigured && (
+                <p
+                  role="alert"
+                  className="mt-3 rounded-lg border border-danger/40 bg-card px-4 py-3 text-sm text-danger"
+                >
+                  Layanan verifikasi wajah belum siap di server. Hubungi HRD
+                  sebelum mendaftar.
+                </p>
+              )}
+
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-4">
+                <div className="flex items-center gap-3">
+                  <ScanFace
+                    className="size-8 text-primary-text"
+                    aria-hidden="true"
+                  />
+                  <div>
+                    <p className="font-medium">
+                      {face.enrolled ? "Wajah terdaftar" : "Belum terdaftar"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {face.enrolled && face.consentAt
+                        ? `Persetujuan diberikan ${new Date(face.consentAt).toLocaleString("id-ID")}`
+                        : "Foto referensi dipakai untuk mencocokkan selfie saat absen."}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {face.enabled && face.providerConfigured && (
+                    <Button
+                      variant={face.enrolled ? "outline" : "default"}
+                      size="sm"
+                      disabled={faceBusy}
+                      onClick={() => void openFaceCamera()}
+                    >
+                      <Camera aria-hidden="true" />
+                      {face.enrolled ? "Daftarkan ulang" : "Daftarkan wajah"}
+                    </Button>
+                  )}
+                  {face.enrolled && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={faceBusy}
+                      onClick={() => void revokeFaceData()}
+                    >
+                      Cabut data wajah
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </section>
+          )}
+
           <h2 className="mt-8 text-lg font-semibold">Ganti kata sandi</h2>
           <form
             onSubmit={onChangePassword}
@@ -687,6 +919,94 @@ export function ProfileView({
           Akun ini belum terhubung ke data karyawan. Hubungi HRD untuk
           melengkapi.
         </p>
+      )}
+
+      {faceCameraOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Daftarkan wajah"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 sm:items-center"
+        >
+          <div className="max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-lg border bg-card p-5">
+            <h2 className="text-lg font-semibold">Daftarkan wajah</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Hadapkan wajah langsung ke kamera dengan pencahayaan cukup.
+              Pastikan hanya satu wajah di dalam bingkai.
+            </p>
+
+            <div className="mt-4 overflow-hidden rounded-md border bg-muted">
+              {facePhoto ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={facePhoto}
+                  alt="Pratinjau foto wajah"
+                  className="aspect-[3/4] w-full object-cover"
+                />
+              ) : (
+                <video
+                  ref={faceVideoRef}
+                  playsInline
+                  muted
+                  className="aspect-[3/4] w-full object-cover"
+                />
+              )}
+            </div>
+
+            <label className="mt-3 flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="mt-0.5 size-4 accent-current"
+                checked={faceConsent}
+                onChange={(event) => setFaceConsent(event.target.checked)}
+              />
+              <span>
+                Saya setuju foto wajah saya disimpan dan dipakai hanya untuk
+                verifikasi absensi. Saya dapat mencabutnya kapan saja dari
+                halaman Profil.
+              </span>
+            </label>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              {!facePhoto ? (
+                <Button
+                  className="flex-1"
+                  disabled={faceBusy}
+                  onClick={captureFacePhoto}
+                >
+                  <Camera aria-hidden="true" />
+                  Ambil Foto
+                </Button>
+              ) : (
+                <>
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    disabled={faceBusy}
+                    onClick={() => setFacePhoto(null)}
+                  >
+                    Ulangi
+                  </Button>
+                  <Button
+                    className="flex-1"
+                    disabled={faceBusy || !faceConsent}
+                    onClick={() => void submitFace()}
+                  >
+                    {faceBusy ? "Mengirim…" : "Simpan Wajah"}
+                  </Button>
+                </>
+              )}
+            </div>
+            <Button
+              variant="ghost"
+              className="mt-2 w-full"
+              disabled={faceBusy}
+              onClick={closeFaceCamera}
+            >
+              Batal
+            </Button>
+          </div>
+        </div>
       )}
     </div>
   );

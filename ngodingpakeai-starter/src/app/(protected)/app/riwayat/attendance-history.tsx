@@ -60,30 +60,17 @@ const longDate = (value: string) => {
   });
 };
 
-const toIso = (value: string) => {
-  if (!value) return undefined;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
-};
-
 export function AttendanceHistory() {
   const [items, setItems] = useState<AttendanceRecord[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
   const [month, setMonth] = useState("");
   const [status, setStatus] = useState("");
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<AttendanceDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
-
-  const [correctingId, setCorrectingId] = useState<string | null>(null);
-  const [correctionReason, setCorrectionReason] = useState("");
-  const [correctionCheckIn, setCorrectionCheckIn] = useState("");
-  const [correctionCheckOut, setCorrectionCheckOut] = useState("");
 
   const load = useCallback(
     async (offset: number, nextMonth: string, nextStatus: string) => {
@@ -142,45 +129,6 @@ export function AttendanceHistory() {
     }
   }, [expandedId]);
 
-  const submitCorrection = useCallback(
-    async (attendanceId: string) => {
-      setBusy(true);
-      setError(null);
-      setNotice(null);
-      try {
-        const response = await fetch("/api/corrections", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            attendanceId,
-            reason: correctionReason,
-            checkInTime: toIso(correctionCheckIn),
-            checkOutTime: toIso(correctionCheckOut),
-          }),
-        });
-        const body = await response.json();
-        if (!response.ok) {
-          setError(
-            body?.error?.details?.[0]?.message ??
-              body?.error?.message ??
-              "Koreksi gagal dikirim.",
-          );
-          return;
-        }
-        setNotice("Koreksi terkirim dan menunggu persetujuan HR.");
-        setCorrectingId(null);
-        setCorrectionReason("");
-        setCorrectionCheckIn("");
-        setCorrectionCheckOut("");
-      } catch {
-        setError("Jaringan bermasalah. Coba lagi.");
-      } finally {
-        setBusy(false);
-      }
-    },
-    [correctionCheckIn, correctionCheckOut, correctionReason],
-  );
-
   return (
     <div className="mx-auto max-w-xl">
       <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
@@ -216,11 +164,6 @@ export function AttendanceHistory() {
         </label>
       </div>
 
-      {notice && (
-        <p role="status" className="mt-4 rounded-lg border bg-card px-4 py-3 text-sm">
-          {notice}
-        </p>
-      )}
       {error && (
         <p
           role="alert"
@@ -286,20 +229,6 @@ export function AttendanceHistory() {
                 >
                   {expandedId === item.id ? "Tutup bukti" : "Lihat bukti"}
                 </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setCorrectingId(
-                      correctingId === item.id ? null : item.id,
-                    );
-                    setCorrectionReason("");
-                    setCorrectionCheckIn("");
-                    setCorrectionCheckOut("");
-                  }}
-                >
-                  {correctingId === item.id ? "Batal" : "Ajukan koreksi"}
-                </Button>
               </div>
 
               {expandedId === item.id && (
@@ -340,61 +269,6 @@ export function AttendanceHistory() {
                       Detail tidak tersedia.
                     </p>
                   )}
-                </div>
-              )}
-
-              {correctingId === item.id && (
-                <div className="mt-3 grid gap-3 rounded-lg border bg-background p-3">
-                  <p className="text-sm font-medium">
-                    Ajukan koreksi absensi
-                  </p>
-                  <div className="grid grid-cols-2 gap-3">
-                    <label className="grid gap-1.5 text-xs">
-                      <span className="font-medium">Jam masuk baru</span>
-                      <input
-                        type="datetime-local"
-                        className="h-9 w-full rounded-md border border-border bg-card px-2 text-xs"
-                        value={correctionCheckIn}
-                        onChange={(event) =>
-                          setCorrectionCheckIn(event.target.value)
-                        }
-                      />
-                    </label>
-                    <label className="grid gap-1.5 text-xs">
-                      <span className="font-medium">Jam pulang baru</span>
-                      <input
-                        type="datetime-local"
-                        className="h-9 w-full rounded-md border border-border bg-card px-2 text-xs"
-                        value={correctionCheckOut}
-                        onChange={(event) =>
-                          setCorrectionCheckOut(event.target.value)
-                        }
-                      />
-                    </label>
-                  </div>
-                  <label className="grid gap-1.5 text-xs">
-                    <span className="font-medium">Alasan koreksi</span>
-                    <textarea
-                      rows={2}
-                      className="w-full rounded-md border border-border bg-card px-3 py-2 text-xs"
-                      value={correctionReason}
-                      onChange={(event) =>
-                        setCorrectionReason(event.target.value)
-                      }
-                      placeholder="Contoh: lupa absen pulang"
-                    />
-                  </label>
-                  <Button
-                    size="sm"
-                    disabled={
-                      busy ||
-                      correctionReason.trim().length < 3 ||
-                      (!correctionCheckIn && !correctionCheckOut)
-                    }
-                    onClick={() => void submitCorrection(item.id)}
-                  >
-                    {busy ? "Mengirim…" : "Kirim koreksi"}
-                  </Button>
                 </div>
               )}
             </li>

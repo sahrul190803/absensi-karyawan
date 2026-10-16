@@ -26,27 +26,6 @@ type Totals = {
   lemburJam: number;
 };
 
-type FinancePeriod = "week" | "month" | "year";
-type FinanceEntry = { label: string; amount: number };
-type FinanceSummary = {
-  period: FinancePeriod;
-  from: string;
-  to: string;
-  income: FinanceEntry[];
-  expense: FinanceEntry[];
-  incomeTotal: number;
-  expenseTotal: number;
-  net: number;
-  margin: number;
-};
-
-const FINANCE_LABELS: Record<FinancePeriod, string> = {
-  week: "7 hari terakhir",
-  month: "Bulan ini",
-  year: "Tahun ini",
-};
-
-const rupiah = (value: number) => `Rp ${value.toLocaleString("id-ID")}`;
 const currentMonth = () => {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -62,15 +41,11 @@ export function ReportView() {
     alpha: 0,
     lemburJam: 0,
   });
-  const [financePeriod, setFinancePeriod] = useState<FinancePeriod>("week");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, "praise" | "warn">>({});
   const [sending, setSending] = useState<string | null>(null);
   const [noteError, setNoteError] = useState<string | null>(null);
-  const [financeData, setFinanceData] = useState<FinanceSummary | null>(null);
-  const [financeLoading, setFinanceLoading] = useState(true);
-  const [financeError, setFinanceError] = useState<string | null>(null);
 
   const load = useCallback(async (nextMonth: string) => {
     setLoading(true);
@@ -106,37 +81,6 @@ export function ReportView() {
     const timer = window.setTimeout(() => void load(currentMonth()), 0);
     return () => window.clearTimeout(timer);
   }, [load]);
-
-  const loadFinance = useCallback(async (period: FinancePeriod) => {
-    setFinanceLoading(true);
-    try {
-      const response = await fetch(
-        `/api/admin/finance/summary?period=${period}`,
-        { cache: "no-store" },
-      );
-      const body = await response.json();
-      if (!response.ok) {
-        setFinanceError(
-          body?.error?.message ?? "Gagal memuat laporan keuangan.",
-        );
-        return;
-      }
-      setFinanceData(body.data);
-      setFinanceError(null);
-    } catch {
-      setFinanceError("Tidak dapat menghubungi server.");
-    } finally {
-      setFinanceLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    const timer = window.setTimeout(
-      () => void loadFinance(financePeriod),
-      0,
-    );
-    return () => window.clearTimeout(timer);
-  }, [financePeriod, loadFinance]);
 
   const exportUrl = (format: "csv" | "xls" | "pdf") =>
     `/api/admin/reports/attendance/export?month=${month}&format=${format}`;
@@ -213,12 +157,6 @@ export function ReportView() {
     }
   };
 
-  const finance = financeData;
-  const financeLabel = FINANCE_LABELS[financePeriod];
-  const financeSalary = finance?.expense.find((entry) =>
-    entry.label.toLowerCase().startsWith("gaji"),
-  );
-
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -289,153 +227,6 @@ export function ReportView() {
           </div>
         ))}
       </dl>
-
-      <section aria-labelledby="keuangan-title" className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 id="keuangan-title" className="font-semibold">
-              Laporan keuangan
-            </h2>
-            <p className="mt-0.5 text-sm text-muted-foreground">
-              Pemasukan &amp; pengeluaran {financeLabel} — otomatis dari catatan
-              keuangan. Rincian yang sama juga tampil di halaman Penggajian.
-            </p>
-          </div>
-          <div
-            role="group"
-            aria-label="Periode laporan keuangan"
-            className="flex rounded-md border border-border-strong bg-card p-0.5"
-          >
-            {(
-              [
-                ["week", "Mingguan"],
-                ["month", "Bulanan"],
-                ["year", "Tahunan"],
-              ] as const
-            ).map(([key, label]) => (
-              <button
-                key={key}
-                type="button"
-                aria-pressed={financePeriod === key}
-                onClick={() => setFinancePeriod(key)}
-                className={`rounded-[5px] px-3 py-1.5 text-sm font-medium transition-colors ${
-                  financePeriod === key
-                    ? "bg-primary-quiet font-semibold text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {financeError && (
-          <p
-            role="alert"
-            className="rounded-lg border border-danger/40 bg-card px-4 py-3 text-sm text-danger"
-          >
-            {financeError}
-          </p>
-        )}
-
-        {financeLoading ? (
-          <p className="text-sm text-muted-foreground">
-            Memuat laporan keuangan…
-          </p>
-        ) : !finance ||
-          (finance.income.length === 0 && finance.expense.length === 0) ? (
-          <div className="rounded-lg border border-dashed bg-card px-6 py-10 text-center">
-            <p className="text-sm text-muted-foreground">
-              Belum ada catatan keuangan pada periode ini.
-            </p>
-          </div>
-        ) : (
-          <>
-            <div className="grid gap-4 sm:grid-cols-3">
-              <article className="rounded-lg border bg-card p-4 shadow-[inset_4px_0_0_0_#137A4A]">
-                <p className="flex items-center justify-between gap-2 text-sm font-semibold text-muted-foreground">
-                  Pemasukan
-                  <span className="font-mono text-xs font-normal">
-                    {financeLabel}
-                  </span>
-                </p>
-                <p className="mt-2 font-mono text-2xl font-medium">
-                  {rupiah(finance.incomeTotal)}
-                </p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {finance.income.length} sumber pemasukan
-                </p>
-              </article>
-              <article className="rounded-lg border bg-card p-4 shadow-[inset_4px_0_0_0_#A65D00]">
-                <p className="flex items-center justify-between gap-2 text-sm font-semibold text-muted-foreground">
-                  Pengeluaran
-                  <span className="font-mono text-xs font-normal">
-                    {financeLabel}
-                  </span>
-                </p>
-                <p className="mt-2 font-mono text-2xl font-medium">
-                  {rupiah(finance.expenseTotal)}
-                </p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {financeSalary
-                    ? `termasuk gaji ${rupiah(financeSalary.amount)}`
-                    : "belum termasuk gaji periode ini"}
-                </p>
-              </article>
-              <article className="rounded-lg border bg-card p-4 shadow-[inset_4px_0_0_0_#E4F222]">
-                <p className="flex items-center justify-between gap-2 text-sm font-semibold text-muted-foreground">
-                  Laba bersih
-                  <span className="font-mono text-xs font-normal">
-                    {financeLabel}
-                  </span>
-                </p>
-                <p className="mt-2 font-mono text-2xl font-medium">
-                  {rupiah(finance.net)}
-                </p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  margin {finance.margin}% dari pemasukan
-                </p>
-              </article>
-            </div>
-
-            <div className="grid gap-4 lg:grid-cols-2">
-              <section className="rounded-lg border bg-card p-5">
-                <h3 className="font-semibold">Rincian pemasukan</h3>
-                <ul className="mt-3 space-y-1.5">
-                  {finance.income.map((entry) => (
-                    <li
-                      key={entry.label}
-                      className="flex items-center justify-between gap-3 text-sm"
-                    >
-                      <span>{entry.label}</span>
-                      <span className="font-mono text-xs text-muted-foreground">
-                        {rupiah(entry.amount)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-              <section className="rounded-lg border bg-card p-5">
-                <h3 className="font-semibold">Rincian pengeluaran</h3>
-                <ul className="mt-3 space-y-1.5">
-                  {finance.expense.map((entry) => (
-                    <li
-                      key={entry.label}
-                      className="flex items-center justify-between gap-3 text-sm"
-                    >
-                      <span>{entry.label}</span>
-                      <span className="font-mono text-xs text-muted-foreground">
-                        {rupiah(entry.amount)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            </div>
-          </>
-        )}
-      </section>
 
       {loading ? (
         <p className="text-sm text-muted-foreground">Memuat laporan…</p>

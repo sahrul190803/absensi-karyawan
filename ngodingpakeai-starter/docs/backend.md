@@ -75,6 +75,8 @@ Grant a role to an existing account:
 npm run role:set -- someone@example.com hrd
 ```
 
+A department stores its head in `departments.manager_user_id`. The Departemen form picks it from the employee list, and saving adds or removes the `hod` role on that account automatically, so HRD never edits a role by hand. See `src/services/departments.service.ts`.
+
 Guard the server, in both places:
 
 ```ts

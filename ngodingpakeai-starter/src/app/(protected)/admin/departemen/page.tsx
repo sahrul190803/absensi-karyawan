@@ -9,18 +9,28 @@ export default async function AdminDepartemenPage() {
   return (
     <MasterDataAdmin
       title="Departemen"
-      description="Kelola departemen, kode, dan manager."
+      description="Kelola departemen, kode, dan kepala divisi. Menunjuk kepala divisi otomatis memberi akses HOD; melepasnya mencabut akses itu bila ia tidak memimpin divisi lain."
       endpoint="/api/departments"
       columns={[
         { key: "code", label: "Kode", format: "mono" },
         { key: "name", label: "Nama" },
-        { key: "managerUserId", label: "Manager (user ID)" },
+        { key: "managerUserId", label: "Kepala divisi (HOD)" },
         { key: "active", label: "Aktif", format: "boolean" },
       ]}
       fields={[
         { key: "code", label: "Kode", type: "text", required: true },
         { key: "name", label: "Nama", type: "text", required: true },
-        { key: "managerUserId", label: "Manager (user ID)", type: "text" },
+        {
+          key: "managerUserId",
+          label: "Kepala divisi (HOD)",
+          type: "select",
+          optionsFrom: {
+            endpoint: "/api/employees",
+            labelKey: "fullName",
+            valueKey: "userId",
+          },
+          nullable: true,
+        },
         { key: "active", label: "Aktif", type: "boolean", defaultValue: true },
       ]}
     />

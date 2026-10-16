@@ -34,6 +34,26 @@ export const scheduleCreateSchema = z
     "Lokasi utama tidak perlu diulang di lokasi tambahan.",
   );
 
+export const scheduleBulkCreateSchema = z
+  .object({
+    employeeIds: z.array(z.string().uuid()).min(1).max(200),
+    dates: z.array(dateOnly).min(1).max(92),
+    shiftId: z.string().uuid(),
+    workLocationId: z.string().uuid(),
+    allowedLocationIds: z.array(z.string().uuid()).max(10).default([]),
+    note: z.string().trim().max(500).default(""),
+  })
+  .strict()
+  .refine(
+    (value) => !value.allowedLocationIds.includes(value.workLocationId),
+    "Lokasi utama tidak perlu diulang di lokasi tambahan.",
+  )
+  .transform((value) => ({
+    ...value,
+    employeeIds: [...new Set(value.employeeIds)],
+    dates: [...new Set(value.dates)].sort(),
+  }));
+
 export const scheduleUpdateSchema = z
   .object({
     date: dateOnly.optional(),
@@ -50,4 +70,5 @@ export const scheduleIdSchema = z.string().uuid();
 export type ScheduleRangeInput = z.infer<typeof scheduleRangeSchema>;
 export type ScheduleListInput = z.infer<typeof scheduleListSchema>;
 export type ScheduleCreateInput = z.infer<typeof scheduleCreateSchema>;
+export type ScheduleBulkCreateInput = z.infer<typeof scheduleBulkCreateSchema>;
 export type ScheduleUpdateInput = z.infer<typeof scheduleUpdateSchema>;

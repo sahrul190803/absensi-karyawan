@@ -1,10 +1,5 @@
-import type { Metadata } from "next";
-import { requireSession } from "@/lib/session";
-import { RequestsView } from "./requests-view";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = { title: "Pengajuan" };
-
-export default async function PengajuanPage() {
-  await requireSession();
-  return <RequestsView />;
+export default function PengajuanRedirectPage() {
+  redirect("/app/attendant");
 }

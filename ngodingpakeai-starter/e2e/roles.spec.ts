@@ -52,7 +52,6 @@ test("admin endpoints answer 401 without a session, not 403", async ({
   for (const [method, url] of [
     ["GET", "/api/admin/trainings"],
     ["DELETE", `/api/admin/trainings/${randomUUID()}`],
-    ["GET", "/api/admin/finance/summary?period=month"],
   ]) {
     const response = await request.fetch(url, { method, headers });
     expect(response.status()).toBe(401);
@@ -68,7 +67,6 @@ test("the default role cannot reach admin resources", async ({ request }) => {
   for (const [method, url] of [
     ["GET", "/api/admin/trainings"],
     ["DELETE", `/api/admin/trainings/${randomUUID()}`],
-    ["GET", "/api/admin/finance/summary?period=month"],
   ]) {
     const response = await request.fetch(url, { method, headers });
     expect(response.status()).toBe(403);
@@ -153,6 +151,117 @@ test("the admin page and its link appear only for a permitted role", async ({
   await expect(
     page.getByRole("heading", { name: "Dashboard" }),
   ).toBeVisible();
+
+  // Admin/HRD tidak memakai area karyawan: /app dialihkan ke dashboard.
+  await page.goto("/app");
+  await expect(page).toHaveURL(/\/admin$/);
+  await expect(
+    page.getByRole("heading", { name: "Dashboard" }),
+  ).toBeVisible();
+  await expect(
+    page.locator('nav[aria-label="Navigasi utama"] a[href="/app"]'),
+  ).toHaveCount(0);
+
+  // Absen ditolak di server, bukan hanya disembunyikan dari menu.
+  const attendance = await page.request.post("/api/attendance/check-in", {
+    headers,
+    data: { photo: "data:image/png;base64,AAAA" },
+  });
+  expect(attendance.status()).toBe(403);
+  expect((await attendance.json()).error.code).toBe("ADMIN_NO_ATTENDANCE");
+});
+
+test("HRD menunjuk kepala divisi dan role HOD mengikuti otomatis", async ({
+  browser,
+}) => {
+  const hrdContext = await browser.newContext();
+  const pool = new Pool({
+    connectionString: process.env.STARTER_TEST_DATABASE_URL,
+    max: 2,
+  });
+  try {
+    const firstEmail = await signUp(hrdContext.request, "Kepala Pertama");
+    const secondEmail = await signUp(hrdContext.request, "Kepala Kedua");
+    const hrdEmail = await signUp(hrdContext.request, "HRD Departemen");
+    await setRole(hrdEmail, "hrd");
+    const hrd = hrdContext.request;
+
+    const userIdByEmail = async (email: string) =>
+      (
+        await pool.query<{ id: string }>(
+          'select id from "user" where email = $1',
+          [email],
+        )
+      ).rows[0].id;
+    const firstUserId = await userIdByEmail(firstEmail);
+    const secondUserId = await userIdByEmail(secondEmail);
+    for (const [userId, name] of [
+      [firstUserId, "Kepala Pertama"],
+      [secondUserId, "Kepala Kedua"],
+    ] as const) {
+      await pool.query(
+        "insert into employees (user_id, nik, full_name, employment_status) values ($1, $2, $3, 'active')",
+        [userId, `NIK-${randomUUID().slice(0, 8)}`, name],
+      );
+    }
+    const roleOf = async (userId: string) =>
+      (
+        await pool.query<{ role: string | null }>(
+          'select role from "user" where id = $1',
+          [userId],
+        )
+      ).rows[0].role ?? "";
+    const hasHod = (role: string) => role.split(",").includes("hod");
+
+    const suffix = randomUUID().slice(0, 8);
+    const createDept = (name: string, managerUserId: string | null) =>
+      hrd.post("/api/departments", {
+        headers,
+        data: { name, managerUserId, active: true },
+      });
+
+    const firstDept = await createDept(`Divisi A ${suffix}`, firstUserId);
+    expect(firstDept.status()).toBe(201);
+    const firstDeptId = (await firstDept.json()).data.id as string;
+    expect(hasHod(await roleOf(firstUserId))).toBe(true);
+
+    const secondDept = await createDept(`Divisi B ${suffix}`, firstUserId);
+    expect(secondDept.status()).toBe(201);
+    const secondDeptId = (await secondDept.json()).data.id as string;
+
+    // Pindah kepengurusan: pemimpin lama tetap HOD karena masih memimpin divisi lain.
+    const moved = await hrd.patch(`/api/departments/${firstDeptId}`, {
+      headers,
+      data: { managerUserId: secondUserId },
+    });
+    expect(moved.status()).toBe(200);
+    expect(hasHod(await roleOf(firstUserId))).toBe(true);
+    expect(hasHod(await roleOf(secondUserId))).toBe(true);
+
+    // Menghapus satu-satunya divisi miliknya mencabut HOD.
+    const removed = await hrd.delete(`/api/departments/${secondDeptId}`, {
+      headers,
+    });
+    expect(removed.status()).toBe(204);
+    expect(hasHod(await roleOf(firstUserId))).toBe(false);
+    expect(hasHod(await roleOf(secondUserId))).toBe(true);
+
+    // Melepas kepala divisi juga mencabut akses.
+    const cleared = await hrd.patch(`/api/departments/${firstDeptId}`, {
+      headers,
+      data: { managerUserId: null },
+    });
+    expect(cleared.status()).toBe(200);
+    expect(hasHod(await roleOf(secondUserId))).toBe(false);
+
+    // Kepala divisi harus akun karyawan yang terdaftar.
+    const invalid = await createDept(`Divisi X ${suffix}`, randomUUID());
+    expect(invalid.status()).toBe(422);
+    expect((await invalid.json()).error.code).toBe("MANAGER_NOT_EMPLOYEE");
+  } finally {
+    await pool.end();
+    await hrdContext.close();
+  }
 });
 
 test("HRD mengatur kuota cuti, karyawan melihat saldo, HOD tidak boleh", async ({

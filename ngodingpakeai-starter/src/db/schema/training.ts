@@ -8,10 +8,10 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
-import { departments } from "./department";
 import { user } from "./user";
 
-// Jadwal training yang diatur HOD/HRD. departmentId null = berlaku semua.
+// Jadwal training yang diatur HOD/HRD. Peserta dipilih pada tabel
+// training_participants; training tanpa peserta berlaku untuk semua karyawan.
 export const trainings = pgTable(
   "trainings",
   {
@@ -21,9 +21,6 @@ export const trainings = pgTable(
     startTime: time("start_time").notNull(),
     endTime: time("end_time").notNull(),
     place: varchar("place", { length: 200 }).default("").notNull(),
-    departmentId: uuid("department_id").references(() => departments.id, {
-      onDelete: "set null",
-    }),
     notes: text("notes").default("").notNull(),
     createdBy: text("created_by").references(() => user.id, {
       onDelete: "set null",

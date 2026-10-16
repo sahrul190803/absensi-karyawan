@@ -25,6 +25,7 @@ import {
   workSchedules,
 } from "@/db/schema";
 import { ApiError } from "@/lib/api";
+import { notifyUserInBackground } from "@/services/notifications.service";
 import type { ListQueryInput } from "@/validators/common";
 import type {
   GeneratePayrollInput,
@@ -81,6 +82,8 @@ const periodFields = {
   generatedBy: payrollPeriods.generatedBy,
   finalizedBy: payrollPeriods.finalizedBy,
   finalizedAt: payrollPeriods.finalizedAt,
+  paidBy: payrollPeriods.paidBy,
+  paidAt: payrollPeriods.paidAt,
   createdAt: payrollPeriods.createdAt,
 };
 
@@ -209,6 +212,12 @@ export async function generateAnyPayrollPeriod(
       409,
       "PAYROLL_FINALIZED",
       "Periode ini sudah difinalkan. Buka kembali sebelum menghitung ulang.",
+    );
+  if (existing?.status === "paid")
+    throw new ApiError(
+      409,
+      "PAYROLL_PAID",
+      "Periode ini sudah dibayarkan dan tidak bisa dihitung ulang.",
     );
 
   const staff = await db
@@ -441,13 +450,31 @@ export async function updateAnyPayrollPeriod(
     note: string;
     finalizedBy: string | null;
     finalizedAt: Date | null;
+    paidBy: string | null;
+    paidAt: Date | null;
   }> = {};
   if (input.note !== undefined) update.note = input.note;
   if (input.status && input.status !== period.status) {
+    if (period.status === "paid")
+      throw new ApiError(
+        409,
+        "PAYROLL_PAID",
+        "Periode ini sudah dibayarkan. Statusnya tidak bisa diubah lagi.",
+      );
     if (input.status === "finalized") {
       update.status = "finalized";
       update.finalizedBy = actorId;
       update.finalizedAt = new Date();
+    } else if (input.status === "paid") {
+      if (period.status !== "finalized")
+        throw new ApiError(
+          409,
+          "PAYROLL_NOT_FINALIZED",
+          "Finalkan periode terlebih dahulu sebelum membayar gaji.",
+        );
+      update.status = "paid";
+      update.paidBy = actorId;
+      update.paidAt = new Date();
     } else {
       update.status = "draft";
       update.finalizedBy = null;
@@ -459,14 +486,65 @@ export async function updateAnyPayrollPeriod(
   await db.update(payrollPeriods).set(update).where(eq(payrollPeriods.id, id));
   await db.insert(auditLogs).values({
     userId: actorId,
-    action: "payroll-period-update",
+    action: update.status === "paid" ? "payroll-paid" : "payroll-period-update",
     entity: "payroll_periods",
     entityId: id,
     oldValue: { status: period.status, note: period.note },
     newValue: update,
   });
+
+  if (update.status === "paid") await notifyPayrollPaid(id, period.year, period.month);
+
   return getAnyPayrollPeriod(id);
 }
+
+const MONTHS = [
+  "Januari",
+  "Februari",
+  "Maret",
+  "April",
+  "Mei",
+  "Juni",
+  "Juli",
+  "Agustus",
+  "September",
+  "Oktober",
+  "November",
+  "Desember",
+];
+
+const rupiah = (value: number) =>
+  `Rp ${Math.round(value).toLocaleString("id-ID")}`;
+
+// Kirim notifikasi ke setiap karyawan bahwa gaji periodenya sudah dibayarkan.
+const notifyPayrollPaid = async (periodId: string, year: number, month: number) => {
+  const label = `${MONTHS[month - 1] ?? month} ${year}`;
+  const rows = await db
+    .select({
+      userId: employees.userId,
+      fullName: employees.fullName,
+      bankName: employees.bankName,
+      bankAccount: employees.bankAccount,
+      total: payrollEntries.total,
+    })
+    .from(payrollEntries)
+    .innerJoin(employees, eq(employees.id, payrollEntries.employeeId))
+    .where(eq(payrollEntries.periodId, periodId));
+
+  for (const row of rows) {
+    const rekening =
+      row.bankName || row.bankAccount
+        ? ` ke rekening ${row.bankName} ${row.bankAccount}`.trimEnd()
+        : "";
+    notifyUserInBackground(row.userId, {
+      event: `payroll-paid:${periodId}`,
+      type: "payroll",
+      title: `Gaji ${label} sudah dibayar`,
+      body: `Gaji kamu untuk periode ${label} sebesar ${rupiah(Number(row.total))} sudah dibayarkan${rekening}. Terima kasih.`,
+      dedupeKey: `payroll-paid:${periodId}:${row.userId}`,
+    });
+  }
+};
 
 export async function updateAnyPayrollEntry(
   actorId: string,
@@ -487,8 +565,10 @@ export async function updateAnyPayrollEntry(
   if (row.periodStatus !== "draft")
     throw new ApiError(
       409,
-      "PAYROLL_FINALIZED",
-      "Periode sudah difinalkan. Buka kembali untuk menyesuaikan.",
+      row.periodStatus === "paid" ? "PAYROLL_PAID" : "PAYROLL_FINALIZED",
+      row.periodStatus === "paid"
+        ? "Periode sudah dibayarkan dan tidak bisa diubah."
+        : "Periode sudah difinalkan. Buka kembali untuk menyesuaikan.",
     );
 
   const otherAdjustment =

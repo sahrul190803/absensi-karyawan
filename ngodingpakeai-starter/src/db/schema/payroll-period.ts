@@ -27,6 +27,10 @@ export const payrollPeriods = pgTable(
       onDelete: "set null",
     }),
     finalizedAt: timestamp("finalized_at", { withTimezone: true }),
+    paidBy: text("paid_by").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

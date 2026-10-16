@@ -16,7 +16,7 @@ export const generatePayrollSchema = z
 
 export const updatePayrollPeriodSchema = z
   .object({
-    status: z.enum(["draft", "finalized"]).optional(),
+    status: z.enum(["draft", "finalized", "paid"]).optional(),
     note: z.string().trim().max(500).optional(),
   })
   .strict()

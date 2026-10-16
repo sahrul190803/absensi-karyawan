@@ -188,16 +188,11 @@ export function DashboardView() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/admin/izin-cuti">
-              Izin &amp; Cuti
-              <ArrowRight aria-hidden="true" />
-            </Link>
-          </Button>
           <Button size="sm" asChild>
             <Link href="/admin/jadwal">
               <CalendarClock aria-hidden="true" />
-              Jadwal Kerja
+              Buka Attendant
+              <ArrowRight aria-hidden="true" />
             </Link>
           </Button>
         </div>
@@ -267,7 +262,7 @@ export function DashboardView() {
           <div className="flex items-center justify-between gap-2">
             <h2 className="font-semibold">Menunggu persetujuan</h2>
             <Link
-              href="/admin/izin-cuti"
+              href="/admin/jadwal"
               className="text-sm font-semibold text-primary-text underline-offset-4 hover:underline"
             >
               Lihat semua

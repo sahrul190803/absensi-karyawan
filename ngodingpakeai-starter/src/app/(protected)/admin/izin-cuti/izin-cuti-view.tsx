@@ -46,6 +46,8 @@ const TYPE_TABS = [
   { value: "shift_swap", label: "Tukar Shift" },
 ];
 
+const ALL_TYPES = TYPE_TABS.map((tab) => tab.value).filter(Boolean);
+
 const STATUS_OPTIONS = [
   { value: "pending", label: "Menunggu" },
   { value: "approved", label: "Disetujui" },
@@ -76,10 +78,20 @@ const periodLabel = (row: RequestRow) => {
   return `${start} – ${end}`;
 };
 
-export function IzinCutiView() {
+export function IzinCutiView({
+  readOnly = false,
+  allowedTypes = ALL_TYPES,
+}: {
+  readOnly?: boolean;
+  allowedTypes?: string[];
+}) {
+  const typeTabs = useMemo(
+    () => TYPE_TABS.filter((tab) => !tab.value || allowedTypes.includes(tab.value)),
+    [allowedTypes],
+  );
   const [items, setItems] = useState<RequestRow[]>([]);
   const [type, setType] = useState("");
-  const [status, setStatus] = useState("pending");
+  const [status, setStatus] = useState(readOnly ? "" : "pending");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<RequestRow | null>(null);
   const [decisionNote, setDecisionNote] = useState("");
@@ -112,9 +124,12 @@ export function IzinCutiView() {
   }, []);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => void load("pending", ""), 0);
+    const timer = window.setTimeout(
+      () => void load(readOnly ? "" : "pending", ""),
+      0,
+    );
     return () => window.clearTimeout(timer);
-  }, [load]);
+  }, [load, readOnly]);
 
   const decide = useCallback(
     async (id: string, decision: "approved" | "rejected") => {
@@ -180,7 +195,7 @@ export function IzinCutiView() {
         aria-label="Jenis pengajuan"
         className="flex flex-wrap gap-2 border-b border-border pb-3"
       >
-        {TYPE_TABS.map((tab) => {
+        {typeTabs.map((tab) => {
           const active = type === tab.value;
           return (
             <button
@@ -440,7 +455,7 @@ export function IzinCutiView() {
               </p>
             )}
 
-            {selected.status === "pending" && (
+            {selected.status === "pending" && !readOnly && (
               <div className="mt-5 border-t border-border pt-4">
                 <label className="grid gap-1.5 text-sm">
                   <span className="font-medium">

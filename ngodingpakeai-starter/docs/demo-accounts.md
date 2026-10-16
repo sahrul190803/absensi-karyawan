@@ -3,12 +3,12 @@
 Akun ini dibuat untuk demo di database pengembangan (`npm run dev`).
 Kata sandi semua akun: `DemoHadirku2026!`
 
-| Peran    | Email                   | Nama           | Data karyawan                             |
-| -------- | ----------------------- | -------------- | ----------------------------------------- |
-| HRD      | hrd@hadirku.demo        | Rina Kartika   | NIK DEMO-HRD, lintas divisi               |
-| HOD      | hod@hadirku.demo        | Hendra Wijaya  | Gudang, Supervisor, Gudang Cikarang       |
-| Marketing| marketing@hadirku.demo  | Maya Sari      | Marketing, Staf Marketing, Kantor Pusat   |
-| Karyawan | karyawan@hadirku.demo   | Andi Pratama   | Gudang, Operator, Gudang Cikarang         |
+| Peran    | Email                   | Nama           | Data karyawan                              |
+| -------- | ----------------------- | -------------- | ------------------------------------------ |
+| HRD      | hrd@hadirku.demo        | Rina Kartika   | NIK DEMO-HRD, HRD, lintas divisi           |
+| HOD      | hod@hadirku.demo        | Hendra Wijaya  | Kitchen, Head Kitchen, Gudang Cikarang     |
+| Marketing| marketing@hadirku.demo  | Maya Sari      | Marketing, Digital Marketing, Kantor Pusat |
+| Karyawan | karyawan@hadirku.demo   | Andi Pratama   | Kitchen, Cook, Gudang Cikarang             |
 
 Catatan:
 

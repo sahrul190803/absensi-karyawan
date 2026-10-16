@@ -88,16 +88,16 @@ const ensureLeaveType = async (name, defaultQuota) => {
   );
 };
 
-const ensureTraining = async (title, date, startTime, endTime, place, departmentId) => {
+const ensureTraining = async (title, date, startTime, endTime, place) => {
   const existing = await client.query(
     "select id from trainings where title = $1 and date = $2 limit 1",
     [title, date],
   );
   if (existing.rowCount > 0) return;
   await client.query(
-    `insert into trainings (title, date, start_time, end_time, place, department_id, notes)
-     values ($1, $2, $3, $4, $5, $6, $7)`,
-    [title, date, startTime, endTime, place, departmentId, ""],
+    `insert into trainings (title, date, start_time, end_time, place, notes)
+     values ($1, $2, $3, $4, $5, $6)`,
+    [title, date, startTime, endTime, place, ""],
   );
 };
 
@@ -113,18 +113,6 @@ const ensureCalendarEvent = async (title, type, date, note) => {
   );
 };
 
-const ensureFinanceEntry = async (date, type, category, amount, note) => {
-  const existing = await client.query(
-    "select id from finance_entries where date = $1 and type = $2 and category = $3 limit 1",
-    [date, type, category],
-  );
-  if (existing.rowCount > 0) return;
-  await client.query(
-    "insert into finance_entries (date, type, category, amount, note) values ($1, $2, $3, $4, $5)",
-    [date, type, category, amount, note ?? ""],
-  );
-};
-
 try {
   await client.connect();
 
@@ -134,17 +122,31 @@ try {
     console.log("company: PT Hadir Sejahtera");
   }
 
-  const ops = await upsertDepartment("OPS", "Operasional");
-  const keu = await upsertDepartment("KEU", "Keuangan");
-  const gdg = await upsertDepartment("GDG", "Gudang");
-  console.log("departments: OPS, KEU, GDG");
+  const hrd = await upsertDepartment("HRD", "HRD");
+  const bar = await upsertDepartment("BAR", "Bar");
+  const kit = await upsertDepartment("KIT", "Kitchen");
+  const srv = await upsertDepartment("SRV", "Service");
+  const acc = await upsertDepartment("ACC", "Accounting");
+  const mkt = await upsertDepartment("MKT", "Marketing");
+  console.log("departments: HRD, BAR, KIT, SRV, ACC, MKT");
 
-  await ensurePosition("Staf Operasional", ops, 1);
-  await ensurePosition("Supervisor", ops, 3);
-  await ensurePosition("Staf Akuntansi", keu, 2);
-  await ensurePosition("Staf Pajak", keu, 2);
-  await ensurePosition("Operator", gdg, 1);
-  console.log("positions: 5");
+  await ensurePosition("PA (Public Area)", hrd, 1);
+  await ensurePosition("Security", hrd, 1);
+  await ensurePosition("Barista", bar, 1);
+  await ensurePosition("Captain Bar", bar, 2);
+  await ensurePosition("Head Bar", bar, 3);
+  await ensurePosition("Helper", kit, 1);
+  await ensurePosition("Steward", kit, 1);
+  await ensurePosition("Cook", kit, 2);
+  await ensurePosition("CDP", kit, 2);
+  await ensurePosition("Head Kitchen", kit, 3);
+  await ensurePosition("Greeter", srv, 1);
+  await ensurePosition("Waitress", srv, 1);
+  await ensurePosition("Runner", srv, 1);
+  await ensurePosition("Cost Control", acc, 2);
+  await ensurePosition("Purchasing", acc, 2);
+  await ensurePosition("Digital Marketing", mkt, 1);
+  console.log("positions: 16");
 
   await ensureWorkLocation("Kantor Pusat", "Jl. Jend. Sudirman Kav. 52, Jakarta", -6.2088, 106.8456, 100);
   await ensureWorkLocation("Gudang Cikarang", "Jl. Industri Selatan Blok GG, Cikarang", -6.2844, 107.154, 150);
@@ -166,9 +168,9 @@ try {
   await ensureLeaveType("Cuti Menikah", 3);
   console.log("leave types: 3");
 
-  await ensureTraining("Induksi K3 Dasar", "2026-10-20", "09:00", "12:00", "Ruang Meeting Kantor Pusat", null);
-  await ensureTraining("Pelatihan SOP Gudang", "2026-10-22", "13:00", "16:00", "Gudang Cikarang", gdg);
-  await ensureTraining("Refreshment Akuntansi", "2026-10-27", "09:00", "11:00", "Ruang Meeting Kantor Pusat", keu);
+  await ensureTraining("Induksi K3 Dasar", "2026-10-20", "09:00", "12:00", "Ruang Meeting Kantor Pusat");
+  await ensureTraining("Pelatihan SOP Gudang", "2026-10-22", "13:00", "16:00", "Gudang Cikarang");
+  await ensureTraining("Refreshment Akuntansi", "2026-10-27", "09:00", "11:00", "Ruang Meeting Kantor Pusat");
   console.log("trainings: 3");
 
   const MONTHS = [
@@ -200,58 +202,6 @@ try {
     "Dapur tutup sementara 2 jam",
   );
   console.log("calendar events: 3");
-
-  // Keuangan: agregat bulan-bulan sebelumnya + rincian harian bulan berjalan.
-  for (let m = 1; m < month; m += 1) {
-    const mPrefix = year + "-" + pad(m);
-    await ensureFinanceEntry(mPrefix + "-01", "income", "Penjualan dine-in", 150000000, "Agregat bulanan");
-    await ensureFinanceEntry(mPrefix + "-01", "income", "Pesanan online", 62000000, "Agregat bulanan");
-    await ensureFinanceEntry(mPrefix + "-01", "income", "Katering & event", 28000000, "Agregat bulanan");
-    await ensureFinanceEntry(mPrefix + "-05", "expense", "Gaji & tunjangan karyawan", 42400000, "Payday bulanan");
-    await ensureFinanceEntry(mPrefix + "-05", "expense", "Bahan baku & persediaan", 81600000, "Agregat bulanan");
-    await ensureFinanceEntry(mPrefix + "-05", "expense", "Operasional (sewa, listrik, air)", 54200000, "Agregat bulanan");
-    await ensureFinanceEntry(mPrefix + "-20", "expense", "Training & pengembangan", 2100000, "Agregat bulanan");
-    await ensureFinanceEntry(mPrefix + "-15", "expense", "Lain-lain", 5400000, "Agregat bulanan");
-  }
-
-  const daysElapsed = now.getDate();
-  for (let day = 1; day <= daysElapsed; day += 1) {
-    const date = monthPrefix + "-" + pad(day);
-    const dine = 4200000 + ((day * 7919) % 1000) * 1200;
-    const online = 1700000 + ((day * 6151) % 1000) * 600;
-    await ensureFinanceEntry(date, "income", "Penjualan dine-in", dine, "");
-    await ensureFinanceEntry(date, "income", "Pesanan online", online, "");
-    if (day % 5 === 0) {
-      await ensureFinanceEntry(
-        date,
-        "income",
-        "Katering & event",
-        6500000 + ((day * 3571) % 5) * 500000,
-        "",
-      );
-    }
-    await ensureFinanceEntry(
-      date,
-      "expense",
-      "Bahan baku & persediaan",
-      1900000 + ((day * 4021) % 700) * 1000,
-      "",
-    );
-    const weekday = new Date(year, month - 1, day).getDay();
-    if (weekday === 1) {
-      await ensureFinanceEntry(date, "expense", "Operasional (sewa, listrik, air)", 3100000, "Mingguan");
-    }
-    if (day === 15) {
-      await ensureFinanceEntry(date, "expense", "Lain-lain", 1500000, "");
-    }
-    if (day === 20) {
-      await ensureFinanceEntry(date, "expense", "Training & pengembangan", 2100000, "");
-    }
-    if (day === 25) {
-      await ensureFinanceEntry(date, "expense", "Gaji & tunjangan karyawan", 42400000, "Payday");
-    }
-  }
-  console.log("finance entries: agregat + harian bulan ini");
 
   console.log("\nSeed complete. Existing rows are preserved.");
 } catch (error) {

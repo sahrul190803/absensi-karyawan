@@ -43,6 +43,8 @@ const TYPE_OPTIONS = [
   { value: "shift_swap", label: "Tukar Shift" },
 ];
 
+const ALL_TYPES = TYPE_OPTIONS.map((option) => option.value);
+
 const dateRange = (row: RequestRow) => {
   const start = formatDate(row.startDate, {
     day: "numeric",
@@ -57,7 +59,19 @@ const dateRange = (row: RequestRow) => {
   })}`;
 };
 
-export function RequestsView() {
+export function RequestsView({
+  allowedTypes = ALL_TYPES,
+  readOnly = false,
+  embedded = false,
+}: {
+  allowedTypes?: string[];
+  readOnly?: boolean;
+  embedded?: boolean;
+}) {
+  const typeOptions = useMemo(
+    () => TYPE_OPTIONS.filter((option) => allowedTypes.includes(option.value)),
+    [allowedTypes],
+  );
   const [items, setItems] = useState<RequestRow[]>([]);
   const [balances, setBalances] = useState<LeaveBalance[]>([]);
   const [status, setStatus] = useState("");
@@ -67,7 +81,7 @@ export function RequestsView() {
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const [type, setType] = useState("permission");
+  const [type, setType] = useState(typeOptions[0]?.value ?? "permission");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [startTime, setStartTime] = useState("");
@@ -206,33 +220,43 @@ export function RequestsView() {
   );
 
   return (
-    <div className="mx-auto max-w-2xl space-y-5">
+    <div className={embedded ? "space-y-5" : "mx-auto max-w-2xl space-y-5"}>
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-            Pengajuan
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Izin, sakit, cuti, dinas luar, lembur, dan tukar shift
+        {embedded ? (
+          <p className="text-sm text-muted-foreground">
+            Jenis pengajuan:{" "}
+            {typeOptions.map((option) => option.label).join(", ") || "—"}
           </p>
-        </div>
-        <Button
-          variant={formOpen ? "outline" : "default"}
-          size="sm"
-          onClick={() => setFormOpen((open) => !open)}
-        >
-          {formOpen ? (
-            <>
-              <X aria-hidden="true" />
-              Tutup
-            </>
-          ) : (
-            <>
-              <Plus aria-hidden="true" />
-              Tambah pengajuan
-            </>
-          )}
-        </Button>
+        ) : (
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+              Request
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {typeOptions.map((option) => option.label).join(", ") ||
+                "Pengajuan karyawan"}
+            </p>
+          </div>
+        )}
+        {!readOnly && (
+          <Button
+            variant={formOpen ? "outline" : "default"}
+            size="sm"
+            onClick={() => setFormOpen((open) => !open)}
+          >
+            {formOpen ? (
+              <>
+                <X aria-hidden="true" />
+                Tutup
+              </>
+            ) : (
+              <>
+                <Plus aria-hidden="true" />
+                Tambah pengajuan
+              </>
+            )}
+          </Button>
+        )}
       </div>
 
       {balances.length > 0 && (
@@ -267,7 +291,7 @@ export function RequestsView() {
         </p>
       )}
 
-      {formOpen && (
+      {formOpen && !readOnly && (
         <section className="rounded-lg border border-border-strong bg-card p-5">
           <h2 className="font-semibold">Buat pengajuan</h2>
           <div className="mt-4 grid gap-3">
@@ -278,7 +302,7 @@ export function RequestsView() {
                 value={type}
                 onChange={(event) => setType(event.target.value)}
               >
-                {TYPE_OPTIONS.map((option) => (
+                {typeOptions.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
@@ -466,7 +490,7 @@ export function RequestsView() {
                   Catatan HOD/HRD: {item.decisionNote}
                 </p>
               )}
-              {item.status === "pending" && (
+              {item.status === "pending" && !readOnly && (
                 <Button
                   variant="outline"
                   size="sm"

@@ -27,7 +27,7 @@ import {
 } from "@/db/schema";
 import { ApiError } from "@/lib/api";
 import { haversineDistanceMeters } from "@/lib/geo";
-import { LOCATION_FREE_ROLES } from "@/lib/permissions";
+import { ADMIN_ROLES, LOCATION_FREE_ROLES } from "@/lib/permissions";
 import { notifyUserInBackground } from "@/services/notifications.service";
 import type {
   AttendanceHistoryInput,
@@ -345,19 +345,29 @@ const nearestTarget = (
   return best;
 };
 
-// Role Marketing dan HOD tidak diwajibkan berada di radius lokasi (sering
-// dinas di luar); absen mereka cukup foto ber-watermark waktu & tempat.
-const isLocationFree = async (userId: string) => {
+const getRoleList = async (userId: string) => {
   const [row] = await db
     .select({ role: user.role })
     .from(user)
     .where(eq(user.id, userId))
     .limit(1);
-  const roleList = (row?.role ?? "")
+  return (row?.role ?? "")
     .split(",")
     .map((role) => role.trim())
     .filter(Boolean);
+};
+
+// Role Marketing dan HOD tidak diwajibkan berada di radius lokasi (sering
+// dinas di luar); absen mereka cukup foto ber-watermark waktu & tempat.
+const isLocationFree = async (userId: string) => {
+  const roleList = await getRoleList(userId);
   return LOCATION_FREE_ROLES.some((role) => roleList.includes(role));
+};
+
+// Admin dan HRD mengelola dashboard, bukan subjek absensi.
+const isAdminAccount = async (userId: string) => {
+  const roleList = await getRoleList(userId);
+  return ADMIN_ROLES.some((role) => roleList.includes(role));
 };
 
 type ResolvedPing = {
@@ -459,6 +469,12 @@ export async function getToday(userId: string) {
 }
 
 export async function checkIn(userId: string, input: AttendancePingInput) {
+  if (await isAdminAccount(userId))
+    throw new ApiError(
+      403,
+      "ADMIN_NO_ATTENDANCE",
+      "Akun admin/HRD mengelola dashboard dan tidak melakukan absensi.",
+    );
   const employee = await requireEmployee(userId);
   const { timezone, accuracyLimitM, allowHolidayWork } = await getConfig();
   const date = todayInTimezone(timezone);
@@ -602,6 +618,12 @@ export async function checkIn(userId: string, input: AttendancePingInput) {
 }
 
 export async function checkOut(userId: string, input: AttendancePingInput) {
+  if (await isAdminAccount(userId))
+    throw new ApiError(
+      403,
+      "ADMIN_NO_ATTENDANCE",
+      "Akun admin/HRD mengelola dashboard dan tidak melakukan absensi.",
+    );
   const employee = await requireEmployee(userId);
   const { timezone, accuracyLimitM } = await getConfig();
   const date = todayInTimezone(timezone);

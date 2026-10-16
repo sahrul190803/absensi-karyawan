@@ -12,6 +12,10 @@ type Settings = {
   defaultRadiusM: number;
   defaultToleranceMinutes: number;
   payday: number;
+  faceVerificationEnabled: boolean;
+  faceSimilarityThreshold: number;
+  faceLivenessRequired: boolean;
+  faceProviderConfigured: boolean;
 };
 
 const ROLE_ROWS = [
@@ -22,7 +26,7 @@ const ROLE_ROWS = [
     duties:
       "Rekrutmen, kelola semua karyawan, penggajian, laporan, aturan perusahaan.",
     access:
-      "Menu penuh: Dashboard, Jadwal Kerja, Izin & Cuti, Penggajian, Laporan, Data Karyawan, Master data, Pengaturan.",
+      "Menu penuh: Dashboard, Attendant (create/request/view), Penggajian, Laporan, Data Karyawan, Master data, Pengaturan.",
   },
   {
     pill: "HOD",
@@ -32,7 +36,7 @@ const ROLE_ROWS = [
     duties:
       "Atur jadwal shift timnya, konfirmasi izin/sakit/tukar shift, kelola training.",
     access:
-      "Menu terbatas: Dashboard, Jadwal Kerja, Izin & Cuti, Training, Laporan. Absen tanpa wajib radius (dinas luar).",
+      "Menu terbatas: Dashboard, Attendant (create/request/view), Training, Laporan. Absen tanpa wajib radius (dinas luar).",
   },
   {
     pill: "Karyawan & Marketing",
@@ -41,7 +45,7 @@ const ROLE_ROWS = [
     duties:
       "Absen foto, lihat jadwal, ajukan izin/tukar shift, klaim jatah makan.",
     access:
-      "Menu personal: Beranda Absen, Jadwal Saya, Riwayat, Pengajuan, Jatah Makan, Profil. Marketing: absen foto tanpa lokasi.",
+      "Menu personal: Beranda Absen, Attendant, Jadwal Makan, Profil. Fitur lain (jadwal, riwayat, training, notifikasi) lewat ikon di Beranda. Marketing: absen foto tanpa lokasi.",
   },
 ] as const;
 
@@ -56,7 +60,7 @@ const LEVELS = [
   {
     number: "2",
     title: "HOD — Kepala Divisi",
-    body: "Mandor tiap bidang: HOD Marketing, HOD Sales, HOD Produksi. Bertanggung jawab penuh atas divisinya.",
+    body: "Mandor tiap bidang: HOD Bar, HOD Kitchen, HOD Service. Bertanggung jawab penuh atas divisinya.",
     pill: "HOD",
     pillClass:
       "border border-border-strong bg-primary-quiet text-primary-text",
@@ -118,6 +122,9 @@ export function SettingsView() {
           defaultRadiusM: settings.defaultRadiusM,
           defaultToleranceMinutes: settings.defaultToleranceMinutes,
           payday: settings.payday,
+          faceVerificationEnabled: settings.faceVerificationEnabled,
+          faceSimilarityThreshold: settings.faceSimilarityThreshold,
+          faceLivenessRequired: settings.faceLivenessRequired,
         }),
       });
       const body = await response.json();
@@ -285,6 +292,84 @@ export function SettingsView() {
         <Button disabled={busy} onClick={() => void save()}>
           {busy ? "Menyimpan…" : "Simpan pengaturan"}
         </Button>
+      </section>
+
+      <section aria-labelledby="wajah-title" className="mt-8">
+        <h2 id="wajah-title" className="text-lg font-semibold tracking-tight">
+          Verifikasi wajah
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Opsional. Bila aktif, setiap absen masuk/pulang diverifikasi dengan
+          foto referensi wajah karyawan. Karyawan mendaftarkan wajahnya dari
+          halaman Profil.
+        </p>
+
+        {!settings.faceProviderConfigured && (
+          <p
+            role="alert"
+            className="mt-3 rounded-lg border border-danger/40 bg-card px-4 py-3 text-sm text-danger"
+          >
+            Provider verifikasi wajah belum dikonfigurasi di server
+            (FACE_PROVIDER / FACE_API_URL / FACE_API_KEY). Verifikasi tidak
+            dapat diaktifkan sampai env diisi.
+          </p>
+        )}
+
+        <div className="mt-4 grid gap-3 rounded-lg border bg-card p-5">
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="size-4 accent-current"
+              checked={settings.faceVerificationEnabled}
+              disabled={!settings.faceProviderConfigured}
+              onChange={(event) =>
+                setSettings({
+                  ...settings,
+                  faceVerificationEnabled: event.target.checked,
+                })
+              }
+            />
+            <span>Wajibkan verifikasi wajah saat absen</span>
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="size-4 accent-current"
+              checked={settings.faceLivenessRequired}
+              onChange={(event) =>
+                setSettings({
+                  ...settings,
+                  faceLivenessRequired: event.target.checked,
+                })
+              }
+            />
+            <span>Wajib liveness (anti-foto/rekaman layar)</span>
+          </label>
+          <label className="grid gap-1.5 text-sm">
+            <span className="font-medium">
+              Ambang kemiripan wajah ({settings.faceSimilarityThreshold}%)
+            </span>
+            <input
+              type="number"
+              min={1}
+              max={100}
+              className="h-10 w-full rounded-md border border-border bg-card px-3 text-sm"
+              value={settings.faceSimilarityThreshold}
+              onChange={(event) =>
+                setSettings({
+                  ...settings,
+                  faceSimilarityThreshold: Number(event.target.value),
+                })
+              }
+            />
+            <span className="text-xs text-muted-foreground">
+              Skor kemiripan minimal agar absen diterima. 60% disarankan.
+            </span>
+          </label>
+          <Button disabled={busy} onClick={() => void save()}>
+            {busy ? "Menyimpan…" : "Simpan pengaturan wajah"}
+          </Button>
+        </div>
       </section>
 
       <section aria-labelledby="tampilan-title" className="mt-8">

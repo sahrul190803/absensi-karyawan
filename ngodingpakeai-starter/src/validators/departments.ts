@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const createDepartmentSchema = z
   .object({
-    code: z.string().trim().min(1).max(20),
+    code: z.string().trim().max(20).optional(),
     name: z.string().trim().min(1).max(120),
     managerUserId: z.string().trim().min(1).max(64).nullish(),
     active: z.boolean().default(true),

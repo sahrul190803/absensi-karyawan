@@ -66,13 +66,17 @@ export function RecurringShiftAdmin() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [assignmentResponse, employeeResponse, shiftResponse, locationResponse] =
-        await Promise.all([
-          fetch("/api/admin/employee-shifts?limit=200", { cache: "no-store" }),
-          fetch("/api/employees?limit=200", { cache: "no-store" }),
-          fetch("/api/shifts?limit=100", { cache: "no-store" }),
-          fetch("/api/work-locations?limit=100", { cache: "no-store" }),
-        ]);
+      const [
+        assignmentResponse,
+        employeeResponse,
+        shiftResponse,
+        locationResponse,
+      ] = await Promise.all([
+        fetch("/api/admin/employee-shifts?limit=200", { cache: "no-store" }),
+        fetch("/api/employees?limit=200", { cache: "no-store" }),
+        fetch("/api/shifts?limit=100", { cache: "no-store" }),
+        fetch("/api/work-locations?limit=100", { cache: "no-store" }),
+      ]);
       const assignmentBody = await assignmentResponse.json();
       const employeesBody = await employeeResponse.json();
       const shiftsBody = await shiftResponse.json();
@@ -108,6 +112,14 @@ export function RecurringShiftAdmin() {
     );
   };
 
+  const resetForm = () => {
+    setEmployeeId("");
+    setShiftId("");
+    setWorkLocationId("");
+    setDays([]);
+    setStartDate(isoDate(new Date()));
+  };
+
   const submit = async () => {
     setBusy(true);
     setError(null);
@@ -134,7 +146,7 @@ export function RecurringShiftAdmin() {
         return;
       }
       setNotice("Penugasan shift disimpan.");
-      setDays([]);
+      resetForm();
       await load();
     } catch {
       setError("Jaringan bermasalah. Coba lagi.");
@@ -173,7 +185,10 @@ export function RecurringShiftAdmin() {
       </p>
 
       {notice && (
-        <p role="status" className="mt-4 rounded-lg border bg-card px-4 py-3 text-sm">
+        <p
+          role="status"
+          className="mt-4 rounded-lg border bg-card px-4 py-3 text-sm"
+        >
           {notice}
         </p>
       )}
@@ -264,14 +279,23 @@ export function RecurringShiftAdmin() {
             ))}
           </div>
         </div>
-        <Button
-          disabled={
-            busy || !employeeId || !shiftId || !workLocationId || days.length === 0
-          }
-          onClick={() => void submit()}
-        >
-          {busy ? "Menyimpan…" : "Simpan penugasan"}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            disabled={
+              busy ||
+              !employeeId ||
+              !shiftId ||
+              !workLocationId ||
+              days.length === 0
+            }
+            onClick={() => void submit()}
+          >
+            {busy ? "Menyimpan…" : "Simpan penugasan"}
+          </Button>
+          <Button variant="outline" disabled={busy} onClick={resetForm}>
+            Batal
+          </Button>
+        </div>
       </div>
 
       {loading ? (
@@ -310,7 +334,9 @@ export function RecurringShiftAdmin() {
               <p className="mt-1 font-mono text-xs text-muted-foreground">
                 {row.daysOfWeek.map((day) => DAY_LABELS[day]).join(", ")} ·{" "}
                 {formatDate(row.startDate)}
-                {row.endDate ? ` – ${formatDate(row.endDate)}` : " · seterusnya"}
+                {row.endDate
+                  ? ` – ${formatDate(row.endDate)}`
+                  : " · seterusnya"}
               </p>
             </li>
           ))}

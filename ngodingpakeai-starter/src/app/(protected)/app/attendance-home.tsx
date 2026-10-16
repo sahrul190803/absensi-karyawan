@@ -18,7 +18,7 @@ import {
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/status-badge";
-import { clock, formatDate, shortTime } from "@/lib/format";
+import { clock, shortTime } from "@/lib/format";
 
 type Schedule = {
   id: string;
@@ -47,31 +47,12 @@ type Today = {
   schedule: Schedule | null;
 };
 
-type HistoryRow = {
-  id: string;
-  date: string;
-  checkInTime: string | null;
-  checkOutTime: string | null;
-  status: string;
-};
-
-type MealToday = {
-  session: string;
-  note: string | null;
-} | null;
-
 type Mode = "check-in" | "check-out";
 
 type PingPosition = {
   latitude: number;
   longitude: number;
   accuracy: number;
-};
-
-const SESSION_LABELS: Record<string, string> = {
-  pagi: "pagi",
-  siang: "siang",
-  malam: "malam",
 };
 
 const getDeviceKey = () => {
@@ -151,8 +132,6 @@ export function AttendanceHome({
   locationFree: boolean;
 }) {
   const [today, setToday] = useState<Today | null>(null);
-  const [history, setHistory] = useState<HistoryRow[]>([]);
-  const [meal, setMeal] = useState<MealToday>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -169,11 +148,9 @@ export function AttendanceHome({
 
   const loadToday = useCallback(async () => {
     try {
-      const [todayResponse, historyResponse, mealResponse] = await Promise.all([
-        fetch("/api/attendance/today", { cache: "no-store" }),
-        fetch("/api/attendance/history?limit=3", { cache: "no-store" }),
-        fetch("/api/meals", { cache: "no-store" }),
-      ]);
+      const todayResponse = await fetch("/api/attendance/today", {
+        cache: "no-store",
+      });
       const todayBody = await todayResponse.json();
       if (!todayResponse.ok) {
         setToday(null);
@@ -181,14 +158,6 @@ export function AttendanceHome({
         return;
       }
       setToday(todayBody.data);
-      if (historyResponse.ok) {
-        const historyBody = await historyResponse.json();
-        setHistory(historyBody.data ?? []);
-      }
-      if (mealResponse.ok) {
-        const mealBody = await mealResponse.json();
-        setMeal(mealBody.data?.todayClaim ?? null);
-      }
       setError(null);
     } catch {
       setError("Tidak dapat menghubungi server.");
@@ -433,10 +402,10 @@ export function AttendanceHome({
       : "Absen hari ini selesai";
 
   const quickLinks = [
+    { href: "/app/attendant", label: "Attendant", icon: Inbox },
     { href: "/app/jadwal", label: "Jadwal Saya", icon: CalendarDays },
-    { href: "/app/riwayat", label: "Riwayat", icon: History },
-    { href: "/app/pengajuan", label: "Pengajuan", icon: Inbox },
-    { href: "/app/makan", label: "Jatah Makan", icon: UtensilsCrossed },
+    { href: "/app/riwayat", label: "Riwayat Absensi", icon: History },
+    { href: "/app/makan", label: "Jadwal Makan", icon: UtensilsCrossed },
     { href: "/app/training", label: "Training", icon: GraduationCap },
     { href: "/app/notifikasi", label: "Notifikasi", icon: Bell },
     { href: "/app/profil", label: "Profil", icon: User },
@@ -619,8 +588,11 @@ export function AttendanceHome({
         )}
       </section>
 
-      <section aria-label="Menu cepat">
-        <ul className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+      <section aria-label="Menu fitur">
+        <h2 className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">
+          Fitur lainnya
+        </h2>
+        <ul className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
           {quickLinks.map((link) => (
             <li key={link.href}>
               <Link
@@ -637,63 +609,6 @@ export function AttendanceHome({
           ))}
         </ul>
       </section>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <section className="rounded-lg border bg-card p-5">
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="font-semibold">Jatah makan hari ini</h2>
-            <Link
-              href="/app/makan"
-              className="text-sm font-semibold text-primary-text underline-offset-4 hover:underline"
-            >
-              {meal ? "Lihat riwayat" : "Klaim sekarang"}
-            </Link>
-          </div>
-          <p className="mt-2 text-sm text-muted-foreground">
-            {meal
-              ? `Klaim makan ${SESSION_LABELS[meal.session] ?? meal.session} sudah tercatat. Satu klaim per hari.`
-              : "Belum ada klaim makan hari ini. Pilih sesi pagi, siang, atau malam."}
-          </p>
-        </section>
-
-        <section className="rounded-lg border bg-card p-5">
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="font-semibold">Absensi terakhir</h2>
-            <Link
-              href="/app/riwayat"
-              className="text-sm font-semibold text-primary-text underline-offset-4 hover:underline"
-            >
-              Lihat semua
-            </Link>
-          </div>
-          {history.length === 0 ? (
-            <p className="mt-2 text-sm text-muted-foreground">
-              Belum ada riwayat absensi.
-            </p>
-          ) : (
-            <ul className="mt-3 divide-y divide-border">
-              {history.map((row) => (
-                <li
-                  key={row.id}
-                  className="flex items-center justify-between gap-3 py-2"
-                >
-                  <span className="font-mono text-xs text-muted-foreground">
-                    {formatDate(row.date, {
-                      weekday: "short",
-                      day: "numeric",
-                      month: "short",
-                    })}
-                  </span>
-                  <span className="font-mono text-xs">
-                    {clock(row.checkInTime)} → {clock(row.checkOutTime)}
-                  </span>
-                  <StatusBadge status={row.status} />
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      </div>
 
       {mode && (
         <div

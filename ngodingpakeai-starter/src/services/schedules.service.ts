@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, eq, gte, inArray, lte, type SQL } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, lte, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import {
   auditLogs,
@@ -11,6 +11,7 @@ import {
 } from "@/db/schema";
 import { ApiError } from "@/lib/api";
 import type {
+  ScheduleBulkCreateInput,
   ScheduleCreateInput,
   ScheduleListInput,
   ScheduleRangeInput,
@@ -69,7 +70,10 @@ export async function listOwnSchedule(
     })
     .from(workSchedules)
     .innerJoin(shifts, eq(shifts.id, workSchedules.shiftId))
-    .innerJoin(workLocations, eq(workLocations.id, workSchedules.workLocationId))
+    .innerJoin(
+      workLocations,
+      eq(workLocations.id, workSchedules.workLocationId),
+    )
     .where(
       and(
         eq(workSchedules.employeeId, employee.id),
@@ -105,7 +109,10 @@ const getScheduleRow = async (id: string) => {
     .from(workSchedules)
     .innerJoin(employees, eq(employees.id, workSchedules.employeeId))
     .innerJoin(shifts, eq(shifts.id, workSchedules.shiftId))
-    .innerJoin(workLocations, eq(workLocations.id, workSchedules.workLocationId))
+    .innerJoin(
+      workLocations,
+      eq(workLocations.id, workSchedules.workLocationId),
+    )
     .where(eq(workSchedules.id, id))
     .limit(1);
   return row;
@@ -163,7 +170,10 @@ export async function listAnySchedules(query: ScheduleListInput) {
     .from(workSchedules)
     .innerJoin(employees, eq(employees.id, workSchedules.employeeId))
     .innerJoin(shifts, eq(shifts.id, workSchedules.shiftId))
-    .innerJoin(workLocations, eq(workLocations.id, workSchedules.workLocationId))
+    .innerJoin(
+      workLocations,
+      eq(workLocations.id, workSchedules.workLocationId),
+    )
     .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(asc(workSchedules.date), asc(employees.fullName))
     .limit(query.limit + 1)
@@ -221,13 +231,94 @@ export async function upsertAnySchedule(
   return getScheduleRow(row.id);
 }
 
+const assertBulkReferences = async (
+  input: Pick<
+    ScheduleBulkCreateInput,
+    "employeeIds" | "shiftId" | "workLocationId"
+  >,
+) => {
+  const employeeRows = await db
+    .select({ id: employees.id })
+    .from(employees)
+    .where(inArray(employees.id, input.employeeIds));
+  if (employeeRows.length !== input.employeeIds.length)
+    throw new ApiError(
+      404,
+      "NOT_FOUND",
+      "Salah satu karyawan tidak ditemukan.",
+    );
+  const [shift] = await db
+    .select({ id: shifts.id })
+    .from(shifts)
+    .where(eq(shifts.id, input.shiftId))
+    .limit(1);
+  if (!shift) throw new ApiError(404, "NOT_FOUND", "Shift tidak ditemukan.");
+  const [location] = await db
+    .select({ id: workLocations.id })
+    .from(workLocations)
+    .where(eq(workLocations.id, input.workLocationId))
+    .limit(1);
+  if (!location)
+    throw new ApiError(404, "NOT_FOUND", "Lokasi kerja tidak ditemukan.");
+};
+
+// Tambah jadwal massal: satu shift dan lokasi untuk banyak karyawan pada
+// beberapa tanggal sekaligus. Jadwal yang sudah ada pada tanggal yang sama
+// diperbarui, mengikuti perilaku upsert satu sel.
+export async function bulkUpsertAnySchedules(
+  actorId: string,
+  input: ScheduleBulkCreateInput,
+) {
+  await assertBulkReferences(input);
+  let upserted = 0;
+  for (const date of input.dates) {
+    const rows = input.employeeIds.map((employeeId) => ({
+      employeeId,
+      date,
+      shiftId: input.shiftId,
+      workLocationId: input.workLocationId,
+      allowedLocationIds: input.allowedLocationIds,
+      note: input.note,
+    }));
+    const inserted = await db
+      .insert(workSchedules)
+      .values(rows)
+      .onConflictDoUpdate({
+        target: [workSchedules.employeeId, workSchedules.date],
+        set: {
+          shiftId: sql`excluded.shift_id`,
+          workLocationId: sql`excluded.work_location_id`,
+          allowedLocationIds: sql`excluded.allowed_location_ids`,
+          note: sql`excluded.note`,
+          updatedAt: new Date(),
+        },
+      })
+      .returning({ id: workSchedules.id });
+    upserted += inserted.length;
+  }
+  await db.insert(auditLogs).values({
+    userId: actorId,
+    action: "schedule-bulk-upsert",
+    entity: "work_schedules",
+    newValue: {
+      employeeIds: input.employeeIds,
+      dates: input.dates,
+      shiftId: input.shiftId,
+      workLocationId: input.workLocationId,
+      upserted,
+    },
+  });
+  return { upserted };
+}
+
 export async function updateAnySchedule(
   actorId: string,
   id: string,
   input: ScheduleUpdateInput,
 ) {
   const existing = await getScheduleRow(id);
-  if (!existing) throw new ApiError(404, "NOT_FOUND", "Jadwal tidak ditemukan.");
+  if (!existing)
+    throw new ApiError(404, "NOT_FOUND", "Jadwal tidak ditemukan.");
   if (input.shiftId || input.workLocationId || input.allowedLocationIds) {
     await assertReferences({
       employeeId: existing.employeeId,
@@ -267,7 +358,8 @@ export async function updateAnySchedule(
 
 export async function deleteAnySchedule(actorId: string, id: string) {
   const existing = await getScheduleRow(id);
-  if (!existing) throw new ApiError(404, "NOT_FOUND", "Jadwal tidak ditemukan.");
+  if (!existing)
+    throw new ApiError(404, "NOT_FOUND", "Jadwal tidak ditemukan.");
   await db.delete(workSchedules).where(eq(workSchedules.id, id));
   await db.insert(auditLogs).values({
     userId: actorId,

@@ -93,7 +93,7 @@ export function MealClaimView() {
     <div className="mx-auto max-w-2xl space-y-5">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-          Jatah Makan
+          Jadwal Makan
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Satu klaim per hari. Pilih sesi makan Anda: pagi, siang, atau malam.

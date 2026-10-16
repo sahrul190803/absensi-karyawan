@@ -59,7 +59,7 @@ const shiftIcon = (startTime: string) => {
   return Moon;
 };
 
-export function ScheduleView() {
+export function ScheduleView({ embedded = false }: { embedded?: boolean }) {
   const [items, setItems] = useState<ScheduleRow[]>([]);
   const [range, setRange] = useState<{ from: string; to: string } | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
@@ -118,17 +118,19 @@ export function ScheduleView() {
   const selectedRow = activeDate ? (map.get(activeDate) ?? null) : null;
 
   return (
-    <div className="mx-auto max-w-2xl space-y-5">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-          Jadwal Kerja Saya
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {range
-            ? `${range.from} s/d ${range.to} · diatur HOD/HRD`
-            : "Dua minggu ke depan"}
-        </p>
-      </div>
+    <div className={embedded ? "space-y-5" : "mx-auto max-w-2xl space-y-5"}>
+      {!embedded && (
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+            Jadwal Kerja Saya
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {range
+              ? `${range.from} s/d ${range.to} · diatur HOD/HRD`
+              : "Dua minggu ke depan"}
+          </p>
+        </div>
+      )}
 
       {error && (
         <p

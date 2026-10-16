@@ -12,7 +12,7 @@ export const statement = {
   shifts: ["read-any", "create", "update", "delete"],
   schedules: ["read-any", "create", "update", "delete"],
   holidays: ["read-any", "create", "update", "delete"],
-  attendance: ["read-any", "update"],
+  attendance: ["read-any"],
   requests: ["read-any", "approve"],
   reports: ["read-any"],
   audit: ["read-any"],
@@ -22,7 +22,6 @@ export const statement = {
   trainings: ["read-any", "create", "update", "delete"],
   meals: ["read-any", "delete-any"],
   calendar: ["read-any", "manage"],
-  finance: ["read-any"],
   appreciations: ["send"],
 } as const;
 
@@ -36,7 +35,8 @@ export const ac = createAccessControl(statement);
 // - marketing: sama seperti karyawan, absen foto tanpa kewajiban lokasi.
 // - hod (Kepala Divisi): jadwal shift, persetujuan izin/sakit/tukar shift,
 //   training. Absen tanpa kewajiban lokasi (sering dinas di luar).
-// - hrd: akses penuh termasuk penggajian, laporan, master data.
+// - hrd/admin: mengelola dashboard admin (master data, persetujuan, laporan,
+//   penggajian). Bukan subjek absensi dan tidak memakai area karyawan.
 export const roles = {
   user: ac.newRole({
     employees: [],
@@ -56,7 +56,6 @@ export const roles = {
     trainings: [],
     meals: [],
     calendar: [],
-    finance: [],
     appreciations: [],
   }),
   marketing: ac.newRole({
@@ -77,7 +76,6 @@ export const roles = {
     trainings: [],
     meals: [],
     calendar: [],
-    finance: [],
     appreciations: [],
   }),
   hod: ac.newRole({
@@ -94,7 +92,6 @@ export const roles = {
     trainings: ["read-any", "create", "update", "delete"],
     meals: ["read-any"],
     calendar: ["read-any"],
-    finance: [],
     appreciations: [],
   }),
   admin: ac.newRole({
@@ -106,7 +103,7 @@ export const roles = {
     shifts: ["read-any", "create", "update", "delete"],
     schedules: ["read-any", "create", "update", "delete"],
     holidays: ["read-any", "create", "update", "delete"],
-    attendance: ["read-any", "update"],
+    attendance: ["read-any"],
     requests: ["read-any", "approve"],
     reports: ["read-any"],
     audit: ["read-any"],
@@ -116,7 +113,6 @@ export const roles = {
     trainings: ["read-any", "create", "update", "delete"],
     meals: ["read-any", "delete-any"],
     calendar: ["read-any", "manage"],
-    finance: ["read-any"],
     appreciations: ["send"],
   }),
   hrd: ac.newRole({
@@ -128,7 +124,7 @@ export const roles = {
     shifts: ["read-any", "create", "update", "delete"],
     schedules: ["read-any", "create", "update", "delete"],
     holidays: ["read-any", "create", "update", "delete"],
-    attendance: ["read-any", "update"],
+    attendance: ["read-any"],
     requests: ["read-any", "approve"],
     reports: ["read-any"],
     audit: ["read-any"],
@@ -138,7 +134,6 @@ export const roles = {
     trainings: ["read-any", "create", "update", "delete"],
     meals: ["read-any", "delete-any"],
     calendar: ["read-any", "manage"],
-    finance: ["read-any"],
     appreciations: ["send"],
   }),
 } as const;

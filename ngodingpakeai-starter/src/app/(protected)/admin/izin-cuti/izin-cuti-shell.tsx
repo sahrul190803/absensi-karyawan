@@ -11,20 +11,28 @@ const TABS = [
 
 type TabValue = (typeof TABS)[number]["value"];
 
-export function IzinCutiShell() {
+export function IzinCutiShell({
+  embedded = false,
+  allowedTypes,
+}: {
+  embedded?: boolean;
+  allowedTypes?: string[];
+}) {
   const [tab, setTab] = useState<TabValue>("persetujuan");
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-          Izin &amp; Cuti
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Tinjau pengajuan cuti, sakit, izin, dinas luar, lembur, dan tukar
-          shift — sekaligus atur kuota cuti tahunan karyawan.
-        </p>
-      </div>
+      {!embedded && (
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+            Izin &amp; Cuti
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Tinjau pengajuan cuti, sakit, izin, dinas luar, lembur, dan tukar
+            shift — sekaligus atur kuota cuti tahunan karyawan.
+          </p>
+        </div>
+      )}
 
       <div
         role="tablist"
@@ -52,7 +60,11 @@ export function IzinCutiShell() {
         })}
       </div>
 
-      {tab === "persetujuan" ? <IzinCutiView /> : <QuotaCutiView />}
+      {tab === "persetujuan" ? (
+        <IzinCutiView allowedTypes={allowedTypes} />
+      ) : (
+        <QuotaCutiView />
+      )}
     </div>
   );
 }

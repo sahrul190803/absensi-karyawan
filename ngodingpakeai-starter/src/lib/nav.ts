@@ -34,12 +34,14 @@ export type NavItem = {
   exact?: boolean;
 };
 
-const EMPLOYEE_ROLES: AppRole[] = ["user", "marketing", "hod", "hrd", "admin"];
+// Admin dan HRD hanya mengelola dashboard admin: tanpa absen, jadwal pribadi,
+// pengajuan, klaim makan, training pribadi, notifikasi, atau profil karyawan.
+const EMPLOYEE_ROLES: AppRole[] = ["user", "marketing", "hod"];
 const MANAGER_ROLES: AppRole[] = ["hod", "hrd", "admin"];
 const ADMIN_ROLES_NAV: AppRole[] = ["hrd", "admin"];
 
 export const NAV_ITEMS: NavItem[] = [
-  // Area karyawan (semua role yang punya data karyawan)
+  // Area karyawan
   {
     href: "/app",
     label: "Beranda",
@@ -49,44 +51,16 @@ export const NAV_ITEMS: NavItem[] = [
     exact: true,
   },
   {
-    href: "/app/jadwal",
-    label: "Jadwal Saya",
-    icon: "calendar",
-    roles: EMPLOYEE_ROLES,
-    group: "utama",
-  },
-  {
-    href: "/app/riwayat",
-    label: "Riwayat Absensi",
-    icon: "history",
-    roles: EMPLOYEE_ROLES,
-    group: "utama",
-  },
-  {
-    href: "/app/pengajuan",
-    label: "Pengajuan",
+    href: "/app/attendant",
+    label: "Attendant",
     icon: "inbox",
     roles: EMPLOYEE_ROLES,
     group: "utama",
   },
   {
     href: "/app/makan",
-    label: "Jatah Makan",
+    label: "Jadwal Makan",
     icon: "utensils",
-    roles: EMPLOYEE_ROLES,
-    group: "utama",
-  },
-  {
-    href: "/app/training",
-    label: "Training",
-    icon: "graduation",
-    roles: EMPLOYEE_ROLES,
-    group: "utama",
-  },
-  {
-    href: "/app/notifikasi",
-    label: "Notifikasi",
-    icon: "bell",
     roles: EMPLOYEE_ROLES,
     group: "utama",
   },
@@ -109,30 +83,9 @@ export const NAV_ITEMS: NavItem[] = [
   },
   {
     href: "/admin/jadwal",
-    label: "Jadwal Kerja",
+    label: "Attendant",
     icon: "grid",
     roles: MANAGER_ROLES,
-    group: "operasional",
-  },
-  {
-    href: "/admin/kalender",
-    label: "Kalender",
-    icon: "calendar",
-    roles: MANAGER_ROLES,
-    group: "operasional",
-  },
-  {
-    href: "/admin/izin-cuti",
-    label: "Izin & Cuti",
-    icon: "inbox",
-    roles: MANAGER_ROLES,
-    group: "operasional",
-  },
-  {
-    href: "/admin/koreksi",
-    label: "Koreksi Absensi",
-    icon: "file-clock",
-    roles: ADMIN_ROLES_NAV,
     group: "operasional",
   },
   {
@@ -192,13 +145,6 @@ export const NAV_ITEMS: NavItem[] = [
     group: "pengaturan",
   },
   {
-    href: "/admin/hari-libur",
-    label: "Hari Libur",
-    icon: "calendar-off",
-    roles: ADMIN_ROLES_NAV,
-    group: "pengaturan",
-  },
-  {
     href: "/admin/perangkat",
     label: "Perangkat",
     icon: "smartphone",
@@ -237,8 +183,7 @@ export function navForRoles(roleList: string[]): NavItem[] {
 // Item bottom-nav mobile untuk area karyawan.
 export const MOBILE_TAB_HREFS = [
   "/app",
-  "/app/jadwal",
-  "/app/riwayat",
-  "/app/pengajuan",
+  "/app/attendant",
+  "/app/makan",
   "/app/profil",
 ];

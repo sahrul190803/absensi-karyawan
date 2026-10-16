@@ -17,7 +17,18 @@ export type MasterField = {
   type: MasterFieldType;
   required?: boolean;
   options?: string[];
-  optionsFrom?: { endpoint: string; labelKey: string };
+  optionsFrom?: {
+    endpoint: string;
+    labelKey: string;
+    // Kolom yang disimpan sebagai nilai; default "id". Mis. kepala divisi
+    // menyimpan userId, bukan id baris karyawan.
+    valueKey?: string;
+    // Izinkan pembuatan data baru langsung dari form (mis. departemen atau
+    // jabatan baru saat menambah karyawan).
+    create?: { nameKey: string };
+  };
+  // Kirim null saat dikosongkan supaya pilihan opsional bisa dilepas kembali.
+  nullable?: boolean;
   defaultValue?: string | number | boolean;
 };
 
@@ -66,6 +77,7 @@ export function MasterDataAdmin({
   const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [values, setValues] = useState<Values>({});
+  const [newOptions, setNewOptions] = useState<Record<string, string>>({});
   const [query, setQuery] = useState("");
 
   const load = useCallback(async () => {
@@ -95,7 +107,7 @@ export function MasterDataAdmin({
   useEffect(() => {
     const sources = fields
       .map((field) => field.optionsFrom)
-      .filter((source): source is { endpoint: string; labelKey: string } =>
+      .filter((source): source is NonNullable<MasterField["optionsFrom"]> =>
         Boolean(source),
       );
     const unique = Array.from(
@@ -114,7 +126,7 @@ export function MasterDataAdmin({
             entries.push([
               source.endpoint,
               body.data.map((row: Record<string, unknown>) => ({
-                value: String(row.id),
+                value: String(row[source.valueKey ?? "id"]),
                 label: String(row[source.labelKey] ?? row.id),
               })),
             ]);
@@ -141,6 +153,7 @@ export function MasterDataAdmin({
   const openCreate = () => {
     setEditingId(null);
     setValues(defaultValues());
+    setNewOptions({});
     setFormOpen(true);
     setNotice(null);
   };
@@ -155,9 +168,44 @@ export function MasterDataAdmin({
     }
     setEditingId(String(item.id));
     setValues(next);
+    setNewOptions({});
     setFormOpen(true);
     setNotice(null);
   };
+
+  // Buat opsi baru (departemen/jabatan) langsung dari form, lalu pakai id-nya.
+  const createOption = useCallback(
+    async (
+      source: NonNullable<MasterField["optionsFrom"]>,
+      name: string,
+      fieldLabel: string,
+    ): Promise<Option | null> => {
+      const response = await fetch(source.endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [source.create?.nameKey ?? "name"]: name }),
+      });
+      const body = await response.json();
+      if (!response.ok) {
+        setError(
+          body?.error?.details?.[0]?.message ??
+            body?.error?.message ??
+            `${fieldLabel} baru gagal dibuat.`,
+        );
+        return null;
+      }
+      const option = {
+        value: String(body.data[source.valueKey ?? "id"]),
+        label: String(body.data[source.labelKey] ?? name),
+      };
+      setOptionMaps((previous) => ({
+        ...previous,
+        [source.endpoint]: [...(previous[source.endpoint] ?? []), option],
+      }));
+      return option;
+    },
+    [],
+  );
 
   const submit = useCallback(async () => {
     setBusy(true);
@@ -165,13 +213,32 @@ export function MasterDataAdmin({
     try {
       const payload: Record<string, unknown> = {};
       for (const field of fields) {
-        const raw = values[field.key];
+        let raw = values[field.key];
+        if (
+          field.type === "select" &&
+          field.optionsFrom?.create &&
+          String(raw) === "__create__"
+        ) {
+          const name = (newOptions[field.key] ?? "").trim();
+          if (!name) {
+            setError(`Isi nama ${field.label.toLowerCase()} baru terlebih dahulu.`);
+            return;
+          }
+          const option = await createOption(field.optionsFrom, name, field.label);
+          if (!option) return;
+          raw = option.value;
+          setValues((previous) => ({ ...previous, [field.key]: option.value }));
+        }
         if (field.type === "boolean") {
           payload[field.key] = Boolean(raw);
           continue;
         }
         const text = String(raw ?? "").trim();
         if (!text) {
+          if (field.nullable) {
+            payload[field.key] = null;
+            continue;
+          }
           if (!field.required) continue;
           payload[field.key] = field.type === "number" ? Number.NaN : "";
           continue;
@@ -199,13 +266,14 @@ export function MasterDataAdmin({
       setNotice(editingId ? "Data diperbarui." : "Data ditambahkan.");
       setFormOpen(false);
       setEditingId(null);
+      setNewOptions({});
       await load();
     } catch {
       setError("Jaringan bermasalah. Coba lagi.");
     } finally {
       setBusy(false);
     }
-  }, [editingId, endpoint, fields, load, values]);
+  }, [createOption, editingId, endpoint, fields, load, newOptions, values]);
 
   const remove = useCallback(
     async (item: Item) => {
@@ -308,33 +376,53 @@ export function MasterDataAdmin({
                     }
                   />
                 ) : field.type === "select" ? (
-                  <select
-                    className="h-10 w-full rounded-md border border-border bg-card px-3 text-sm"
-                    value={String(values[field.key] ?? "")}
-                    onChange={(event) =>
-                      setValues((prev) => ({
-                        ...prev,
-                        [field.key]: event.target.value,
-                      }))
-                    }
-                  >
-                    <option value="">Pilih…</option>
-                    {(field.options ??
-                      (field.optionsFrom
-                        ? (optionMaps[field.optionsFrom.endpoint] ?? []).map(
-                            (option) => option.value,
-                          )
-                        : [])
-                    ).map((option) => (
-                      <option key={option} value={option}>
-                        {field.optionsFrom
-                          ? ((optionMaps[field.optionsFrom.endpoint] ?? []).find(
-                              (entry) => entry.value === option,
-                            )?.label ?? option)
-                          : option}
-                      </option>
-                    ))}
-                  </select>
+                  <>
+                    <select
+                      className="h-10 w-full rounded-md border border-border bg-card px-3 text-sm"
+                      value={String(values[field.key] ?? "")}
+                      onChange={(event) =>
+                        setValues((prev) => ({
+                          ...prev,
+                          [field.key]: event.target.value,
+                        }))
+                      }
+                    >
+                      <option value="">Pilih…</option>
+                      {(field.options ??
+                        (field.optionsFrom
+                          ? (optionMaps[field.optionsFrom.endpoint] ?? []).map(
+                              (option) => option.value,
+                            )
+                          : [])
+                      ).map((option) => (
+                        <option key={option} value={option}>
+                          {field.optionsFrom
+                            ? ((optionMaps[field.optionsFrom.endpoint] ?? []).find(
+                                (entry) => entry.value === option,
+                              )?.label ?? option)
+                            : option}
+                        </option>
+                      ))}
+                      {field.optionsFrom?.create && (
+                        <option value="__create__">+ Tambah baru…</option>
+                      )}
+                    </select>
+                    {field.optionsFrom?.create &&
+                      String(values[field.key] ?? "") === "__create__" && (
+                        <input
+                          className="h-10 w-full rounded-md border border-border bg-card px-3 text-sm"
+                          placeholder={`Nama ${field.label.toLowerCase()} baru`}
+                          aria-label={`Nama ${field.label.toLowerCase()} baru`}
+                          value={newOptions[field.key] ?? ""}
+                          onChange={(event) =>
+                            setNewOptions((previous) => ({
+                              ...previous,
+                              [field.key]: event.target.value,
+                            }))
+                          }
+                        />
+                      )}
+                  </>
                 ) : (
                   <input
                     type={
