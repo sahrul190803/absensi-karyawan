@@ -24,7 +24,7 @@ export type MasterField = {
 export type MasterColumn = {
   key: string;
   label: string;
-  format?: "text" | "mono" | "date" | "time" | "boolean";
+  format?: "text" | "mono" | "date" | "time" | "boolean" | "document";
   valueLabels?: Record<string, string>;
 };
 
@@ -270,21 +270,21 @@ export function MasterDataAdmin({
       </div>
 
       {notice && (
-        <p role="status" className="mt-4 rounded-xl border bg-card px-4 py-3 text-sm">
+        <p role="status" className="mt-4 rounded-lg border bg-card px-4 py-3 text-sm">
           {notice}
         </p>
       )}
       {error && (
         <p
           role="alert"
-          className="mt-4 rounded-xl border border-destructive/40 bg-card px-4 py-3 text-sm text-destructive"
+          className="mt-4 rounded-lg border border-danger/40 bg-card px-4 py-3 text-sm text-danger"
         >
           {error}
         </p>
       )}
 
       {formOpen && (
-        <section className="mt-6 rounded-2xl border bg-card p-5">
+        <section className="mt-6 rounded-lg border bg-card p-5">
           <h2 className="text-lg font-semibold">
             {editingId ? "Ubah data" : "Tambah data"}
           </h2>
@@ -309,7 +309,7 @@ export function MasterDataAdmin({
                   />
                 ) : field.type === "select" ? (
                   <select
-                    className="h-10 w-full rounded-lg border bg-transparent px-3 text-sm"
+                    className="h-10 w-full rounded-md border border-border bg-card px-3 text-sm"
                     value={String(values[field.key] ?? "")}
                     onChange={(event) =>
                       setValues((prev) => ({
@@ -347,7 +347,7 @@ export function MasterDataAdmin({
                             : "text"
                     }
                     step={field.type === "number" ? "any" : undefined}
-                    className="h-10 w-full rounded-lg border bg-transparent px-3 text-sm"
+                    className="h-10 w-full rounded-md border border-border bg-card px-3 text-sm"
                     value={String(values[field.key] ?? "")}
                     onChange={(event) =>
                       setValues((prev) => ({
@@ -379,7 +379,7 @@ export function MasterDataAdmin({
         type="search"
         placeholder="Cari…"
         aria-label={`Cari ${title}`}
-        className="mt-6 h-10 w-full rounded-lg border bg-transparent px-3 text-sm"
+        className="mt-6 h-10 w-full rounded-md border border-border bg-card px-3 text-sm"
         value={query}
         onChange={(event) => setQuery(event.target.value)}
       />
@@ -387,7 +387,7 @@ export function MasterDataAdmin({
       {loading ? (
         <p className="mt-4 text-sm text-muted-foreground">Memuat…</p>
       ) : visible.length === 0 ? (
-        <div className="mt-4 rounded-2xl border border-dashed bg-card px-6 py-10 text-center">
+        <div className="mt-4 rounded-lg border border-dashed bg-card px-6 py-10 text-center">
           <p className="text-sm text-muted-foreground">
             Tidak ada data yang cocok.
           </p>
@@ -395,7 +395,7 @@ export function MasterDataAdmin({
       ) : (
         <ul className="mt-4 grid gap-3">
           {visible.map((item) => (
-            <li key={String(item.id)} className="rounded-2xl border bg-card p-4">
+            <li key={String(item.id)} className="rounded-lg border bg-card p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <dl className="grid flex-1 gap-1 text-sm sm:grid-cols-2">
                   {columns.map((column) => (
@@ -405,7 +405,26 @@ export function MasterDataAdmin({
                     >
                       <dt className="text-muted-foreground">{column.label}</dt>
                       <dd className={column.format === "mono" ? "font-mono" : ""}>
-                        {displayValue(item, column)}
+                        {column.format === "document" ? (
+                          item[column.key] ? (
+                            <a
+                              href={`/api/employees/${String(item.id)}/documents/${
+                                column.key.toLowerCase().includes("ktp")
+                                  ? "ktp"
+                                  : "photo"
+                              }`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="font-semibold text-primary-text underline underline-offset-4"
+                            >
+                              Lihat
+                            </a>
+                          ) : (
+                            "—"
+                          )
+                        ) : (
+                          displayValue(item, column)
+                        )}
                       </dd>
                     </div>
                   ))}

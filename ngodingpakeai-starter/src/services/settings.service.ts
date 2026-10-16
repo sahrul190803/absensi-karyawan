@@ -12,6 +12,7 @@ const fields = {
   gpsAccuracyLimitM: companies.gpsAccuracyLimitM,
   defaultRadiusM: companies.defaultRadiusM,
   defaultToleranceMinutes: companies.defaultToleranceMinutes,
+  payday: companies.payday,
   updatedAt: companies.updatedAt,
 };
 

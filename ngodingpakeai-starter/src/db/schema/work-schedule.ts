@@ -25,6 +25,8 @@ export const workSchedules = pgTable(
     workLocationId: uuid("work_location_id")
       .notNull()
       .references(() => workLocations.id, { onDelete: "restrict" }),
+    // Lokasi alternatif yang juga sah untuk absen (multi-location routing).
+    allowedLocationIds: uuid("allowed_location_ids").array(),
     note: text("note").default("").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()

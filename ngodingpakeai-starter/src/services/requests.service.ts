@@ -1,13 +1,27 @@
 import "server-only";
+import { mkdir, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { and, desc, eq, type SQL } from "drizzle-orm";
 import { db } from "@/db";
-import { auditLogs, notifications, requests, user } from "@/db/schema";
+import { auditLogs, requests, user } from "@/db/schema";
 import { ApiError } from "@/lib/api";
+import { cancelAlphaForRange } from "@/services/alpha.service";
+import { deductLeaveForApprovedRequest } from "@/services/leave.service";
+import { notifyUserInBackground } from "@/services/notifications.service";
 import type {
   CreateRequestInput,
   DecisionInput,
   RequestListInput,
 } from "@/validators/requests";
+
+const MAX_ATTACHMENT_BYTES = 3 * 1024 * 1024;
+
+const ALPHA_EXCUSED_TYPES = new Set([
+  "permission",
+  "sick",
+  "leave",
+  "business_trip",
+]);
 
 const requestFields = {
   id: requests.id,
@@ -18,12 +32,46 @@ const requestFields = {
   startTime: requests.startTime,
   endTime: requests.endTime,
   reason: requests.reason,
+  attachmentUrl: requests.attachmentUrl,
   status: requests.status,
   approvedBy: requests.approvedBy,
   decidedAt: requests.decidedAt,
   decisionNote: requests.decisionNote,
   createdAt: requests.createdAt,
   updatedAt: requests.updatedAt,
+};
+
+const storeAttachment = async (dataUrl: string, name: string) => {
+  const match = dataUrl.match(
+    /^data:(image\/(?:jpeg|png|webp)|application\/pdf);base64,(.+)$/,
+  );
+  if (!match)
+    throw new ApiError(
+      422,
+      "INVALID_ATTACHMENT",
+      "Lampiran harus berformat JPG, PNG, WEBP, atau PDF.",
+    );
+  const mimeType = match[1];
+  const buffer = Buffer.from(match[2], "base64");
+  if (buffer.byteLength > MAX_ATTACHMENT_BYTES)
+    throw new ApiError(
+      422,
+      "ATTACHMENT_TOO_LARGE",
+      "Ukuran lampiran melebihi 3 MB.",
+    );
+  const extension =
+    mimeType === "application/pdf"
+      ? "pdf"
+      : mimeType === "image/png"
+        ? "png"
+        : mimeType === "image/webp"
+          ? "webp"
+          : "jpg";
+  const directory = resolve(process.cwd(), "storage", "request-attachments");
+  await mkdir(directory, { recursive: true });
+  const storageKey = `${name}.${extension}`;
+  await writeFile(resolve(directory, storageKey), buffer);
+  return { storageKey, mimeType, fileSize: buffer.byteLength };
 };
 
 export async function listOwnRequests(
@@ -56,9 +104,25 @@ export async function createOwnRequest(
   userId: string,
   input: CreateRequestInput,
 ) {
+  const id = crypto.randomUUID();
+  let attachmentUrl: string | null = null;
+  if (input.attachment) {
+    const stored = await storeAttachment(input.attachment, `${id}-attachment`);
+    attachmentUrl = stored.storageKey;
+  }
   const [row] = await db
     .insert(requests)
-    .values({ userId, ...input })
+    .values({
+      id,
+      userId,
+      type: input.type,
+      startDate: input.startDate,
+      endDate: input.endDate ?? null,
+      startTime: input.startTime ?? null,
+      endTime: input.endTime ?? null,
+      reason: input.reason,
+      attachmentUrl,
+    })
     .returning(requestFields);
   await db.insert(auditLogs).values({
     userId,
@@ -69,6 +133,7 @@ export async function createOwnRequest(
       type: input.type,
       startDate: input.startDate,
       endDate: input.endDate ?? null,
+      attachment: Boolean(attachmentUrl),
     },
   });
   return row;
@@ -134,6 +199,31 @@ export async function decideAnyRequest(
   id: string,
   input: DecisionInput,
 ) {
+  const [existing] = await db
+    .select(requestFields)
+    .from(requests)
+    .where(and(eq(requests.id, id), eq(requests.status, "pending")))
+    .limit(1);
+  if (!existing)
+    throw new ApiError(
+      404,
+      "NOT_FOUND",
+      "Pengajuan tidak ditemukan atau sudah diputus.",
+    );
+
+  const startDate = existing.startDate;
+  const endDate = existing.endDate ?? existing.startDate;
+
+  let leaveDays: number | null = null;
+  if (input.status === "approved" && existing.type === "leave") {
+    const result = await deductLeaveForApprovedRequest(
+      existing.userId,
+      startDate,
+      endDate,
+    );
+    leaveDays = result.days;
+  }
+
   const [row] = await db
     .update(requests)
     .set({
@@ -150,15 +240,34 @@ export async function decideAnyRequest(
       "NOT_FOUND",
       "Pengajuan tidak ditemukan atau sudah diputus.",
     );
+
+  let cancelledAlpha = 0;
+  if (input.status === "approved" && ALPHA_EXCUSED_TYPES.has(existing.type)) {
+    const result = await cancelAlphaForRange(
+      existing.userId,
+      startDate,
+      endDate,
+      approverId,
+      `request-approved:${row.id}`,
+    );
+    cancelledAlpha = result.cancelled;
+  }
+
   await db.insert(auditLogs).values({
     userId: approverId,
     action: `request-${input.status}`,
     entity: "requests",
     entityId: id,
-    newValue: { status: input.status, note: input.decisionNote },
+    oldValue: { status: existing.status, type: existing.type },
+    newValue: {
+      status: input.status,
+      note: input.decisionNote,
+      leaveDays,
+      cancelledAlpha,
+    },
   });
-  await db.insert(notifications).values({
-    userId: row.userId,
+  notifyUserInBackground(row.userId, {
+    event: `request-${input.status}`,
     type: `request-${input.status}`,
     title:
       input.status === "approved"
@@ -169,4 +278,42 @@ export async function decideAnyRequest(
       "Buka halaman Pengajuan untuk melihat detail terbaru.",
   });
   return row;
+}
+
+const ATTACHMENT_MIME: Record<string, string> = {
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  webp: "image/webp",
+  pdf: "application/pdf",
+};
+
+export async function getRequestAttachment(
+  userId: string,
+  canReadAny: boolean,
+  id: string,
+) {
+  const [row] = await db
+    .select({
+      userId: requests.userId,
+      attachmentUrl: requests.attachmentUrl,
+    })
+    .from(requests)
+    .where(eq(requests.id, id))
+    .limit(1);
+  if (!row || !row.attachmentUrl)
+    throw new ApiError(404, "NOT_FOUND", "Lampiran tidak ditemukan.");
+  if (!canReadAny && row.userId !== userId)
+    throw new ApiError(404, "NOT_FOUND", "Lampiran tidak ditemukan.");
+
+  const extension = row.attachmentUrl.split(".").pop()?.toLowerCase() ?? "";
+  return {
+    absolutePath: resolve(
+      process.cwd(),
+      "storage",
+      "request-attachments",
+      row.attachmentUrl,
+    ),
+    mimeType: ATTACHMENT_MIME[extension] ?? "application/octet-stream",
+  };
 }

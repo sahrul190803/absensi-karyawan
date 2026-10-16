@@ -92,10 +92,7 @@ export function withApiPermission(
   handler: (session: Session) => Promise<Response>,
 ) {
   return withApiSession(request, async (session) => {
-    const { success } = await auth.api.userHasPermission({
-      body: { userId: session.user.id, permissions },
-    });
-    if (!success)
+    if (!(await sessionHasPermission(session, permissions)))
       throw new ApiError(
         403,
         "FORBIDDEN",
@@ -103,6 +100,17 @@ export function withApiPermission(
       );
     return handler(session);
   });
+}
+
+// Mixed endpoints: owners read their own rows, permitted roles read any row.
+export async function sessionHasPermission(
+  session: Session,
+  permissions: Permissions,
+) {
+  const { success } = await auth.api.userHasPermission({
+    body: { userId: session.user.id, permissions },
+  });
+  return success;
 }
 
 export async function readJson(request: Request): Promise<unknown> {

@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, LoaderCircle } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,8 @@ import { siteConfig } from "@/config/site";
 export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
   const signingUp = mode === "sign-up";
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const justReset = searchParams.get("reset") === "success";
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
 
@@ -37,17 +39,15 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
         setError(
           signingUp
             ? result.error.message ||
-                "We couldn't create your account. Please try again."
-            : "We couldn't sign you in. Check your email and password and try again.",
+                "Akun tidak dapat dibuat. Coba lagi sebentar lagi."
+            : "Email atau kata sandi salah. Periksa kembali lalu coba lagi.",
         );
         return;
       }
       router.replace(siteConfig.homePath);
       router.refresh();
     } catch {
-      setError(
-        "We couldn't reach the server. Check your connection and try again.",
-      );
+      setError("Tidak dapat menghubungi server. Periksa koneksi lalu coba lagi.");
     } finally {
       setPending(false);
     }
@@ -55,16 +55,16 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
 
   return (
     <div className="w-full max-w-sm">
-      <p className="mb-3 text-sm font-medium text-primary">
-        {signingUp ? "A place to begin" : "Good to see you"}
+      <p className="mb-3 inline-flex items-center rounded-full border border-border-strong bg-primary-quiet px-2.5 py-0.5 text-xs font-semibold text-primary-text">
+        {signingUp ? "Registrasi akun karyawan" : "Portal kehadiran"}
       </p>
-      <h1 className="text-3xl font-semibold tracking-tight">
-        {signingUp ? "Create your account" : "Welcome back"}
+      <h1 className="text-3xl font-semibold tracking-tight text-balance">
+        {signingUp ? "Daftar akun karyawan" : "Masuk ke Hadirku Lecarassa"}
       </h1>
-      <p className="mt-3 text-base leading-7 text-muted-foreground">
+      <p className="mt-3 text-sm leading-6 text-muted-foreground">
         {signingUp
-          ? "One small step. Then make this app your own."
-          : "Sign in to pick up where you left off."}
+          ? "Gunakan nama lengkap dan email aktif. HRD akan menghubungkan akun ini dengan data karyawan Anda."
+          : "Absen dengan foto selfie, lihat jadwal shift, ajukan izin, dan klaim jatah makan."}
       </p>
       <form
         onSubmit={onSubmit}
@@ -74,16 +74,16 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
       >
         <fieldset disabled={pending} className="space-y-5">
           <legend className="sr-only">
-            {signingUp ? "Account details" : "Sign in details"}
+            {signingUp ? "Data akun" : "Data masuk"}
           </legend>
           {signingUp && (
             <div className="space-y-2">
-              <Label htmlFor="name">Name</Label>
+              <Label htmlFor="name">Nama lengkap</Label>
               <Input
                 id="name"
                 name="name"
                 autoComplete="name"
-                placeholder="Your name"
+                placeholder="Nama sesuai data karyawan"
                 required
                 minLength={1}
                 maxLength={100}
@@ -98,13 +98,13 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
               name="email"
               type="email"
               autoComplete="email"
-              placeholder="you@example.com"
+              placeholder="nama@lecarassa.id"
               required
               maxLength={254}
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
+            <Label htmlFor="password">Kata sandi</Label>
             <Input
               id="password"
               name="password"
@@ -117,15 +117,30 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
             />
             {signingUp && (
               <p id="password-hint" className="text-sm text-muted-foreground">
-                Use at least 8 characters.
+                Minimal 8 karakter.
+              </p>
+            )}
+            {!signingUp && (
+              <p className="text-right">
+                <Link
+                  className="rounded-sm text-sm font-medium text-foreground underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-ring"
+                  href="/forgot-password"
+                >
+                  Lupa kata sandi?
+                </Link>
               </p>
             )}
           </div>
+          {justReset && !signingUp && (
+            <p className="rounded-lg border bg-card p-3 text-sm leading-6">
+              Kata sandi berhasil diubah. Silakan masuk dengan kata sandi baru.
+            </p>
+          )}
           {error && (
             <p
               id="auth-error"
               role="alert"
-              className="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm leading-6 text-destructive"
+              className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm leading-6 text-danger"
             >
               {error}
             </p>
@@ -137,22 +152,18 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
                 aria-hidden="true"
               />
             ) : null}
-            {pending
-              ? "Please wait…"
-              : signingUp
-                ? "Create account"
-                : "Sign in"}
+            {pending ? "Mohon tunggu…" : signingUp ? "Buat akun" : "Masuk"}
             {!pending && <ArrowRight aria-hidden="true" />}
           </Button>
         </fieldset>
       </form>
       <p className="mt-6 text-center text-sm text-muted-foreground">
-        {signingUp ? "Already have an account?" : "New here?"}{" "}
+        {signingUp ? "Sudah punya akun?" : "Belum punya akun?"}{" "}
         <Link
           className="rounded-sm font-medium text-foreground underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-ring"
           href={signingUp ? "/sign-in" : "/sign-up"}
         >
-          {signingUp ? "Sign in" : "Create an account"}
+          {signingUp ? "Masuk" : "Daftar sekarang"}
         </Link>
       </p>
     </div>

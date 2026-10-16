@@ -61,9 +61,9 @@ No model API key is required by the app. The AI integration supports your coding
 
 ## Backend example
 
-The [Notes API](docs/backend.md) demonstrates the standard: **API routes → Better Auth session checks and validation → services → Drizzle/PostgreSQL**. It supports real CRUD with per-account ownership. Database queries live in `src/services/`; each Drizzle table lives in its own file under `src/db/schema/`. The feature-building skill follows this structure for future prompts.
+The [backend guide](docs/backend.md) demonstrates the standard using the Requests API (izin & cuti): **API routes → Better Auth session checks and validation → services → Drizzle/PostgreSQL**. It supports real CRUD with per-account ownership. Database queries live in `src/services/`; each Drizzle table lives in its own file under `src/db/schema/`. The feature-building skill follows this structure for future prompts.
 
-The same doc covers **role-based access**: `src/lib/permissions.ts` declares resources and roles, `/api/admin/notes` and `/admin` are guarded by permissions rather than a session alone, and `npm run role:set -- you@example.com admin` promotes an account. Signup can never set a role.
+The same doc covers **role-based access**: `src/lib/permissions.ts` declares resources and roles, `/api/admin/requests` and `/admin` are guarded by permissions rather than a session alone, and `npm run role:set -- you@example.com admin` promotes an account. Signup can never set a role.
 
 ## Commands
 

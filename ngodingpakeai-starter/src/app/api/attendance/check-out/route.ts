@@ -1,4 +1,5 @@
 import { readJson, withApiSession } from "@/lib/api";
+import { rateLimit } from "@/lib/rate-limit";
 import { checkOut } from "@/services/attendance.service";
 import { attendancePingSchema } from "@/validators/attendance";
 
@@ -6,6 +7,7 @@ export const runtime = "nodejs";
 
 export function POST(request: Request) {
   return withApiSession(request, async (session) => {
+    rateLimit(`attendance:check-out:${session.user.id}`, 10, 60_000);
     const input = attendancePingSchema.parse(await readJson(request));
     const record = await checkOut(session.user.id, input);
     return Response.json({ data: record });

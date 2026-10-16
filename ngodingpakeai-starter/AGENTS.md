@@ -45,7 +45,7 @@ Project-scoped MCP files for Codex, Claude Code, Cursor, and VS Code are include
 - `src/db/schema/`, `src/db/index.ts`, `drizzle/`: PostgreSQL tables, shared node-postgres pool, committed migrations. Run on Node.js with a persistent PostgreSQL server.
 - `src/app/api/`: thin HTTP route handlers. Use `withApiSession` from `src/lib/api.ts` for authenticated JSON endpoints.
 - `src/services/`: server-only application logic and all domain Drizzle queries. Pass the verified session user ID separately; filter ownership in SQL.
-- `src/validators/`: strict Zod input schemas and inferred types. See `docs/backend.md` and the Notes example.
+- `src/validators/`: strict Zod input schemas and inferred types. See `docs/backend.md` and the Requests example.
 - `src/components/ui`: owned shadcn/ui primitives. Reuse them and `cn()`; add components with `npx shadcn@4.21.0 add <component>`.
 - `src/app/globals.css`: Tailwind v4 theme tokens. No Tailwind v3 config is needed. Motion imports come from `motion/react`; respect reduced motion.
 - `starter.config.json` and `src/config/site.ts`: identity and common paths.
@@ -56,7 +56,7 @@ Authorize separately from authentication when a feature reaches past the caller'
 
 Use PostgreSQL pgTable/boolean/timestamp columns and asynchronous queries. DATABASE_URL is the runtime connection. MIGRATION_DATABASE_URL optionally provides a direct migration connection. Never substitute SQLite syntax or disable TLS verification. Tests require Docker and use unique disposable PostgreSQL servers.
 
-Build application backend features with API routes calling services. Do not put domain queries in routes, pages, or components. Validate request bodies, IDs, and pagination before service calls. Require the configured Origin on cookie-authenticated mutations, including DELETE. Services contain SQL and domain logic; HTTP responses and cookie handling stay in the API layer. Reuse the Notes pattern documented in `docs/backend.md`.
+Build application backend features with API routes calling services. Do not put domain queries in routes, pages, or components. Validate request bodies, IDs, and pagination before service calls. Require the configured Origin on cookie-authenticated mutations, including DELETE. Services contain SQL and domain logic; HTTP responses and cookie handling stay in the API layer. Reuse the Requests pattern documented in `docs/backend.md`.
 
 Keep each Drizzle table in `src/db/schema/<table>.ts` and export it from `src/db/schema/index.ts`. Use direct sibling imports for foreign keys. For a schema change, edit the table file, run `npm run db:generate`, inspect the new SQL, then run `npm run db:migrate`. Commit SQL and `drizzle/meta` together. Do not rewrite applied migrations or run destructive resets to repair an error.
 

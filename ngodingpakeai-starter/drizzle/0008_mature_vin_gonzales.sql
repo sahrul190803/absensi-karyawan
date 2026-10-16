@@ -1,0 +1,1 @@
+ALTER TABLE "work_schedules" ADD COLUMN "allowed_location_ids" uuid[];

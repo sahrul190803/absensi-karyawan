@@ -1,0 +1,1 @@
+ALTER TABLE "companies" ADD COLUMN "payday" integer DEFAULT 25 NOT NULL;

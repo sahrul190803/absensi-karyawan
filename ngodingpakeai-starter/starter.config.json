@@ -1,7 +1,7 @@
 {
   "id": "postgres",
-  "name": "Base Postgres",
-  "description": "An AI-friendly foundation with Drizzle and PostgreSQL.",
+  "name": "Hadirku Lecarassa",
+  "description": "Absensi kehadiran karyawan Lecarassa: foto selfie ber-watermark waktu & tempat, jadwal shift, izin & cuti, jatah makan, dan penggajian.",
   "baseVersion": "0.1.0",
   "database": "postgresql"
 }

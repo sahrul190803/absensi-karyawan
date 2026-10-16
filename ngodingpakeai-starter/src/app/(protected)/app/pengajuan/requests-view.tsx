@@ -1,8 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { FileText } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { FileText, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { StatusBadge } from "@/components/status-badge";
+import { formatDate, REQUEST_TYPE_LABELS } from "@/lib/format";
 
 type RequestRow = {
   id: string;
@@ -14,41 +16,52 @@ type RequestRow = {
   reason: string;
   status: string;
   decisionNote: string | null;
+  attachmentUrl: string | null;
+  createdAt: string;
 };
 
-const typeLabels: Record<string, string> = {
-  permission: "Izin",
-  sick: "Sakit",
-  leave: "Cuti",
-  business_trip: "Dinas luar",
-  overtime: "Lembur",
+type LeaveBalance = {
+  id: string;
+  leaveTypeName: string;
+  year: number;
+  remaining: number;
 };
 
-const statusLabels: Record<string, string> = {
-  pending: "Menunggu",
-  approved: "Disetujui",
-  rejected: "Ditolak",
-  cancelled: "Dibatalkan",
-};
+const STATUS_TABS = [
+  { value: "", label: "Semua" },
+  { value: "pending", label: "Menunggu" },
+  { value: "approved", label: "Disetujui" },
+  { value: "rejected", label: "Ditolak" },
+];
 
-const formatDate = (value: string | null) => {
-  if (!value) return "";
-  const date = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString("id-ID", {
+const TYPE_OPTIONS = [
+  { value: "permission", label: "Izin" },
+  { value: "sick", label: "Sakit" },
+  { value: "leave", label: "Cuti" },
+  { value: "business_trip", label: "Dinas Luar" },
+  { value: "overtime", label: "Lembur" },
+  { value: "shift_swap", label: "Tukar Shift" },
+];
+
+const dateRange = (row: RequestRow) => {
+  const start = formatDate(row.startDate, {
     day: "numeric",
     month: "short",
     year: "numeric",
   });
+  if (!row.endDate || row.endDate === row.startDate) return start;
+  return `${start} – ${formatDate(row.endDate, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  })}`;
 };
-
-const dateRange = (row: RequestRow) =>
-  row.endDate && row.endDate !== row.startDate
-    ? `${formatDate(row.startDate)} – ${formatDate(row.endDate)}`
-    : formatDate(row.startDate);
 
 export function RequestsView() {
   const [items, setItems] = useState<RequestRow[]>([]);
+  const [balances, setBalances] = useState<LeaveBalance[]>([]);
+  const [status, setStatus] = useState("");
+  const [formOpen, setFormOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -57,19 +70,28 @@ export function RequestsView() {
   const [type, setType] = useState("permission");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [startTime, setStartTime] = useState("");
+  const [endTime, setEndTime] = useState("");
+  const [attachment, setAttachment] = useState<string | null>(null);
+  const [attachmentName, setAttachmentName] = useState("");
   const [reason, setReason] = useState("");
 
   const load = useCallback(async () => {
     try {
-      const response = await fetch("/api/requests?limit=50", {
-        cache: "no-store",
-      });
-      const body = await response.json();
-      if (!response.ok) {
+      const [requestResponse, balanceResponse] = await Promise.all([
+        fetch("/api/requests?limit=50", { cache: "no-store" }),
+        fetch("/api/leave-balances", { cache: "no-store" }),
+      ]);
+      const body = await requestResponse.json();
+      if (!requestResponse.ok) {
         setError(body?.error?.message ?? "Gagal memuat pengajuan.");
         return;
       }
       setItems(body.data);
+      if (balanceResponse.ok) {
+        const balanceBody = await balanceResponse.json();
+        setBalances(balanceBody.data ?? []);
+      }
       setError(null);
     } catch {
       setError("Tidak dapat menghubungi server.");
@@ -95,7 +117,10 @@ export function RequestsView() {
           type,
           startDate,
           endDate: endDate || undefined,
+          startTime: type === "overtime" ? startTime || undefined : undefined,
+          endTime: type === "overtime" ? endTime || undefined : undefined,
           reason,
+          attachment: attachment || undefined,
         }),
       });
       const body = await response.json();
@@ -110,20 +135,57 @@ export function RequestsView() {
       setNotice("Pengajuan terkirim dan menunggu persetujuan.");
       setReason("");
       setEndDate("");
+      setStartTime("");
+      setEndTime("");
+      setAttachment(null);
+      setAttachmentName("");
+      setFormOpen(false);
       await load();
     } catch {
       setError("Jaringan bermasalah. Coba lagi.");
     } finally {
       setBusy(false);
     }
-  }, [endDate, load, reason, startDate, type]);
+  }, [attachment, endDate, endTime, load, reason, startDate, startTime, type]);
+
+  const pickAttachment = useCallback((file: File | null) => {
+    setError(null);
+    if (!file) {
+      setAttachment(null);
+      setAttachmentName("");
+      return;
+    }
+    const allowed = [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "application/pdf",
+    ];
+    if (!allowed.includes(file.type)) {
+      setError("Lampiran harus JPG, PNG, WEBP, atau PDF.");
+      return;
+    }
+    if (file.size > 3 * 1024 * 1024) {
+      setError("Ukuran lampiran maksimal 3 MB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setAttachment(typeof reader.result === "string" ? reader.result : null);
+      setAttachmentName(file.name);
+    };
+    reader.onerror = () => setError("Gagal membaca berkas lampiran.");
+    reader.readAsDataURL(file);
+  }, []);
 
   const cancel = useCallback(
     async (id: string) => {
       setBusy(true);
       setError(null);
       try {
-        const response = await fetch(`/api/requests/${id}`, { method: "PATCH" });
+        const response = await fetch(`/api/requests/${id}`, {
+          method: "PATCH",
+        });
         const body = await response.json();
         if (!response.ok) {
           setError(body?.error?.message ?? "Gagal membatalkan pengajuan.");
@@ -138,115 +200,270 @@ export function RequestsView() {
     [load],
   );
 
+  const filtered = useMemo(
+    () => (status ? items.filter((item) => item.status === status) : items),
+    [items, status],
+  );
+
   return (
-    <div className="mx-auto max-w-xl">
-      <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-        Pengajuan
-      </h1>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Izin, sakit, cuti, dinas luar, dan lembur
-      </p>
+    <div className="mx-auto max-w-2xl space-y-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+            Pengajuan
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Izin, sakit, cuti, dinas luar, lembur, dan tukar shift
+          </p>
+        </div>
+        <Button
+          variant={formOpen ? "outline" : "default"}
+          size="sm"
+          onClick={() => setFormOpen((open) => !open)}
+        >
+          {formOpen ? (
+            <>
+              <X aria-hidden="true" />
+              Tutup
+            </>
+          ) : (
+            <>
+              <Plus aria-hidden="true" />
+              Tambah pengajuan
+            </>
+          )}
+        </Button>
+      </div>
+
+      {balances.length > 0 && (
+        <ul className="flex flex-wrap gap-2">
+          {balances.map((balance) => (
+            <li
+              key={balance.id}
+              className="rounded-md border border-border bg-card px-3 py-2 text-xs"
+            >
+              <span className="text-muted-foreground">
+                {balance.leaveTypeName} {balance.year}
+              </span>
+              <span className="ml-2 font-mono font-semibold">
+                sisa {balance.remaining}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
 
       {notice && (
-        <p role="status" className="mt-4 rounded-xl border bg-card px-4 py-3 text-sm">
+        <p role="status" className="rounded-lg border bg-card px-4 py-3 text-sm">
           {notice}
         </p>
       )}
       {error && (
         <p
           role="alert"
-          className="mt-4 rounded-xl border border-destructive/40 bg-card px-4 py-3 text-sm text-destructive"
+          className="rounded-lg border border-danger/40 bg-card px-4 py-3 text-sm text-danger"
         >
           {error}
         </p>
       )}
 
-      <section className="mt-6 rounded-2xl border bg-card p-5">
-        <h2 className="text-lg font-semibold">Buat pengajuan</h2>
-        <div className="mt-4 grid gap-3">
-          <label className="grid gap-1.5 text-sm">
-            <span className="font-medium">Jenis</span>
-            <select
-              className="h-10 w-full rounded-lg border bg-transparent px-3 text-sm"
-              value={type}
-              onChange={(event) => setType(event.target.value)}
-            >
-              <option value="permission">Izin</option>
-              <option value="sick">Sakit</option>
-              <option value="leave">Cuti</option>
-              <option value="business_trip">Dinas luar</option>
-              <option value="overtime">Lembur</option>
-            </select>
-          </label>
-          <div className="grid grid-cols-2 gap-3">
+      {formOpen && (
+        <section className="rounded-lg border border-border-strong bg-card p-5">
+          <h2 className="font-semibold">Buat pengajuan</h2>
+          <div className="mt-4 grid gap-3">
             <label className="grid gap-1.5 text-sm">
-              <span className="font-medium">Tanggal mulai</span>
-              <input
-                type="date"
-                className="h-10 w-full rounded-lg border bg-transparent px-3 text-sm"
-                value={startDate}
-                onChange={(event) => setStartDate(event.target.value)}
-              />
+              <span className="font-medium">Jenis</span>
+              <select
+                className="h-10 w-full rounded-md border border-border bg-card px-3 text-sm"
+                value={type}
+                onChange={(event) => setType(event.target.value)}
+              >
+                {TYPE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </label>
-            <label className="grid gap-1.5 text-sm">
-              <span className="font-medium">Tanggal selesai</span>
-              <input
-                type="date"
-                className="h-10 w-full rounded-lg border bg-transparent px-3 text-sm"
-                value={endDate}
-                onChange={(event) => setEndDate(event.target.value)}
-              />
-            </label>
-          </div>
-          <label className="grid gap-1.5 text-sm">
-            <span className="font-medium">Alasan</span>
-            <textarea
-              rows={3}
-              className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
-              value={reason}
-              onChange={(event) => setReason(event.target.value)}
-              placeholder="Jelaskan alasan pengajuan"
-            />
-          </label>
-          <Button
-            disabled={busy || !startDate || reason.trim().length < 3}
-            onClick={() => void submit()}
-          >
-            {busy ? "Mengirim…" : "Ajukan"}
-          </Button>
-        </div>
-      </section>
 
-      <h2 className="mt-8 text-lg font-semibold">Riwayat pengajuan</h2>
+            {type === "shift_swap" && (
+              <p className="rounded-md border border-border bg-primary-quiet px-3 py-2 text-xs leading-5">
+                Isi tanggal shift yang ingin ditukar, lalu jelaskan di alasan:
+                shift Anda, rekan pengganti, dan shift tujuannya. HOD akan
+                mengonfirmasi lalu memperbarui jadwal.
+              </p>
+            )}
+
+            <div className="grid grid-cols-2 gap-3">
+              <label className="grid gap-1.5 text-sm">
+                <span className="font-medium">
+                  {type === "shift_swap"
+                    ? "Tanggal shift saya"
+                    : "Tanggal mulai"}
+                </span>
+                <input
+                  type="date"
+                  className="h-10 w-full rounded-md border border-border bg-card px-3 text-sm"
+                  value={startDate}
+                  onChange={(event) => setStartDate(event.target.value)}
+                />
+              </label>
+              <label className="grid gap-1.5 text-sm">
+                <span className="font-medium">
+                  {type === "shift_swap"
+                    ? "Tanggal shift pengganti"
+                    : "Tanggal selesai"}
+                </span>
+                <input
+                  type="date"
+                  className="h-10 w-full rounded-md border border-border bg-card px-3 text-sm"
+                  value={endDate}
+                  onChange={(event) => setEndDate(event.target.value)}
+                />
+              </label>
+            </div>
+
+            {type === "overtime" && (
+              <div className="grid grid-cols-2 gap-3">
+                <label className="grid gap-1.5 text-sm">
+                  <span className="font-medium">Jam mulai</span>
+                  <input
+                    type="time"
+                    className="h-10 w-full rounded-md border border-border bg-card px-3 text-sm"
+                    value={startTime}
+                    onChange={(event) => setStartTime(event.target.value)}
+                  />
+                </label>
+                <label className="grid gap-1.5 text-sm">
+                  <span className="font-medium">Jam selesai</span>
+                  <input
+                    type="time"
+                    className="h-10 w-full rounded-md border border-border bg-card px-3 text-sm"
+                    value={endTime}
+                    onChange={(event) => setEndTime(event.target.value)}
+                  />
+                </label>
+              </div>
+            )}
+
+            <label className="grid gap-1.5 text-sm">
+              <span className="font-medium">
+                {type === "shift_swap" ? "Detail tukar shift" : "Alasan"}
+              </span>
+              <textarea
+                rows={3}
+                className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm"
+                value={reason}
+                onChange={(event) => setReason(event.target.value)}
+                placeholder={
+                  type === "shift_swap"
+                    ? "Contoh: Saya tukar shift Kamis 07:00 dengan Sari pada Jumat 13:00 karena urusan keluarga."
+                    : "Jelaskan alasan pengajuan"
+                }
+              />
+            </label>
+
+            <label className="grid gap-1.5 text-sm">
+              <span className="font-medium">
+                Lampiran {type === "sick" ? "(surat dokter)" : "(opsional)"}
+              </span>
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp,application/pdf"
+                className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-md file:border file:border-border file:bg-card file:px-3 file:py-1.5 file:text-sm"
+                onChange={(event) =>
+                  pickAttachment(event.target.files?.[0] ?? null)
+                }
+              />
+              {attachmentName && (
+                <span className="text-xs text-muted-foreground">
+                  Terlampir: {attachmentName}
+                </span>
+              )}
+            </label>
+
+            <Button
+              disabled={
+                busy ||
+                !startDate ||
+                reason.trim().length < 3 ||
+                (type === "overtime" && (!startTime || !endTime))
+              }
+              onClick={() => void submit()}
+            >
+              {busy ? "Mengirim…" : "Kirim pengajuan"}
+            </Button>
+          </div>
+        </section>
+      )}
+
+      <div
+        role="tablist"
+        aria-label="Status pengajuan"
+        className="flex flex-wrap gap-2"
+      >
+        {STATUS_TABS.map((tab) => (
+          <button
+            key={tab.value || "all"}
+            type="button"
+            role="tab"
+            aria-selected={status === tab.value}
+            onClick={() => setStatus(tab.value)}
+            className={`rounded-md border px-3 py-1.5 text-sm font-medium transition-colors ${
+              status === tab.value
+                ? "border-border-strong bg-primary-quiet text-foreground"
+                : "border-border bg-card text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
       {loading ? (
-        <p className="mt-3 text-sm text-muted-foreground">Memuat…</p>
-      ) : items.length === 0 ? (
-        <div className="mt-3 rounded-2xl border border-dashed bg-card px-6 py-10 text-center">
+        <p className="text-sm text-muted-foreground">Memuat…</p>
+      ) : filtered.length === 0 ? (
+        <div className="rounded-lg border border-dashed bg-card px-6 py-12 text-center">
           <FileText
             className="mx-auto size-6 text-muted-foreground"
             aria-hidden="true"
           />
           <p className="mt-3 text-sm text-muted-foreground">
-            Belum ada pengajuan.
+            Belum ada pengajuan pada filter ini.
           </p>
         </div>
       ) : (
-        <ul className="mt-3 grid gap-3">
-          {items.map((item) => (
-            <li key={item.id} className="rounded-2xl border bg-card p-4">
+        <ul className="grid gap-3">
+          {filtered.map((item) => (
+            <li key={item.id} className="rounded-lg border bg-card p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="font-medium">{typeLabels[item.type] ?? item.type}</p>
-                <span className="rounded-full border px-2.5 py-0.5 text-xs font-medium">
-                  {statusLabels[item.status] ?? item.status}
-                </span>
+                <p className="font-medium">
+                  {REQUEST_TYPE_LABELS[item.type] ?? item.type}
+                </p>
+                <StatusBadge status={item.status} kind="request" />
               </div>
-              <p className="mt-1 font-mono text-xs text-muted-foreground">
+              <p className="mt-1.5 font-mono text-xs text-muted-foreground">
                 {dateRange(item)}
+                {item.startTime && item.endTime
+                  ? ` · ${item.startTime.slice(0, 5)}–${item.endTime.slice(0, 5)}`
+                  : ""}
               </p>
-              <p className="mt-2 text-sm text-muted-foreground">{item.reason}</p>
-              {item.decisionNote && (
+              <p className="mt-2 text-sm leading-6 whitespace-pre-wrap">
+                {item.reason}
+              </p>
+              {item.attachmentUrl && (
+                <a
+                  className="mt-2 inline-block text-sm font-semibold text-primary-text underline-offset-4 hover:underline"
+                  href={`/api/requests/${item.id}/attachment`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Lihat lampiran
+                </a>
+              )}
+              {item.decisionNote && item.status !== "pending" && (
                 <p className="mt-2 text-sm text-muted-foreground">
-                  Catatan HR: {item.decisionNote}
+                  Catatan HOD/HRD: {item.decisionNote}
                 </p>
               )}
               {item.status === "pending" && (

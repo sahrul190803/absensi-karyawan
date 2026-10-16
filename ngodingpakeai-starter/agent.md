@@ -6,4 +6,4 @@ On a first app-building prompt, read [.agents/skills/starter-setup/SKILL.md](.ag
 
 Database operations and troubleshooting: [.agents/skills/dev-database/SKILL.md](.agents/skills/dev-database/SKILL.md).
 
-Backend features use API routes, Better Auth session checks, validators, services for all queries, and separate Drizzle table files. Read [docs/backend.md](docs/backend.md) and follow the Notes example.
+Backend features use API routes, Better Auth session checks, validators, services for all queries, and separate Drizzle table files. Read [docs/backend.md](docs/backend.md) and follow the Requests example.

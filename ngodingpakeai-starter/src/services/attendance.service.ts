@@ -1,21 +1,34 @@
 import "server-only";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { and, desc, eq, gte, lte } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNotNull,
+  isNull,
+  lte,
+} from "drizzle-orm";
 import { db } from "@/db";
 import {
   attendancePhotos,
   attendanceRecords,
   auditLogs,
   companies,
+  devices,
   employees,
   holidays,
   shifts,
+  user,
   workLocations,
   workSchedules,
 } from "@/db/schema";
 import { ApiError } from "@/lib/api";
 import { haversineDistanceMeters } from "@/lib/geo";
+import { LOCATION_FREE_ROLES } from "@/lib/permissions";
+import { notifyUserInBackground } from "@/services/notifications.service";
 import type {
   AttendanceHistoryInput,
   AttendancePingInput,
@@ -25,6 +38,9 @@ const MAX_PHOTO_BYTES = 3 * 1024 * 1024;
 
 const recordFields = {
   id: attendanceRecords.id,
+  employeeId: attendanceRecords.employeeId,
+  workScheduleId: attendanceRecords.workScheduleId,
+  workLocationId: attendanceRecords.workLocationId,
   date: attendanceRecords.date,
   checkInTime: attendanceRecords.checkInTime,
   checkOutTime: attendanceRecords.checkOutTime,
@@ -68,11 +84,24 @@ const minutesInTimezone = (timeZone: string, date: Date) => {
   return hours * 60 + minutes;
 };
 
+const previousDate = (date: string) => {
+  const value = new Date(`${date}T00:00:00Z`);
+  value.setUTCDate(value.getUTCDate() - 1);
+  return value.toISOString().slice(0, 10);
+};
+
+const daysBetween = (from: string, to: string) =>
+  Math.round(
+    (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) /
+      86_400_000,
+  );
+
 const getConfig = async () => {
   const [config] = await db.select().from(companies).limit(1);
   return {
     timezone: config?.timezone ?? "Asia/Jakarta",
     accuracyLimitM: config?.gpsAccuracyLimitM ?? 50,
+    allowHolidayWork: config?.allowHolidayWork ?? false,
   };
 };
 
@@ -97,6 +126,14 @@ const requireEmployee = async (userId: string) => {
   return employee;
 };
 
+type GeofenceTarget = {
+  locationId: string;
+  locationName: string;
+  radiusM: number;
+  locationLat: number;
+  locationLng: number;
+};
+
 const getSchedule = async (employeeId: string, date: string) => {
   const [schedule] = await db
     .select({
@@ -110,6 +147,7 @@ const getSchedule = async (employeeId: string, date: string) => {
       radiusM: workLocations.radiusM,
       locationLat: workLocations.latitude,
       locationLng: workLocations.longitude,
+      allowedLocationIds: workSchedules.allowedLocationIds,
     })
     .from(workSchedules)
     .innerJoin(shifts, eq(shifts.id, workSchedules.shiftId))
@@ -121,7 +159,80 @@ const getSchedule = async (employeeId: string, date: string) => {
       ),
     )
     .limit(1);
-  return schedule;
+  if (!schedule) return null;
+  return {
+    ...schedule,
+    targets: await buildTargets(schedule, schedule.allowedLocationIds),
+  };
+};
+
+const buildTargets = async (
+  primary: {
+    locationId: string;
+    locationName: string;
+    radiusM: number;
+    locationLat: number;
+    locationLng: number;
+  },
+  allowedLocationIds: string[] | null | undefined,
+): Promise<GeofenceTarget[]> => {
+  const targets: GeofenceTarget[] = [primary];
+  if (allowedLocationIds && allowedLocationIds.length > 0) {
+    const extras = await db
+      .select({
+        locationId: workLocations.id,
+        locationName: workLocations.name,
+        radiusM: workLocations.radiusM,
+        locationLat: workLocations.latitude,
+        locationLng: workLocations.longitude,
+      })
+      .from(workLocations)
+      .where(inArray(workLocations.id, allowedLocationIds));
+    targets.push(...extras);
+  }
+  return targets;
+};
+
+const getScheduleById = async (id: string) => {
+  const [schedule] = await db
+    .select({
+      id: workSchedules.id,
+      startTime: shifts.startTime,
+      endTime: shifts.endTime,
+      toleranceMinutes: shifts.toleranceMinutes,
+      crossesMidnight: shifts.crossesMidnight,
+      locationId: workLocations.id,
+      locationName: workLocations.name,
+      radiusM: workLocations.radiusM,
+      locationLat: workLocations.latitude,
+      locationLng: workLocations.longitude,
+      allowedLocationIds: workSchedules.allowedLocationIds,
+    })
+    .from(workSchedules)
+    .innerJoin(shifts, eq(shifts.id, workSchedules.shiftId))
+    .innerJoin(workLocations, eq(workLocations.id, workSchedules.workLocationId))
+    .where(eq(workSchedules.id, id))
+    .limit(1);
+  if (!schedule) return null;
+  return {
+    ...schedule,
+    targets: await buildTargets(schedule, schedule.allowedLocationIds),
+  };
+};
+
+const getRecordLocation = async (locationId: string) => {
+  const [location] = await db
+    .select({
+      locationId: workLocations.id,
+      locationName: workLocations.name,
+      radiusM: workLocations.radiusM,
+      locationLat: workLocations.latitude,
+      locationLng: workLocations.longitude,
+    })
+    .from(workLocations)
+    .where(eq(workLocations.id, locationId))
+    .limit(1);
+  return location ? { ...location, targets: [location] } : null;
 };
 
 const storePhoto = async (dataUrl: string, name: string) => {
@@ -140,6 +251,36 @@ const storePhoto = async (dataUrl: string, name: string) => {
   return { storageKey, mimeType, fileSize: buffer.byteLength };
 };
 
+const resolveDeviceId = async (
+  userId: string,
+  deviceKey?: string,
+  deviceInfo?: { os: string; model: string; browser: string },
+) => {
+  if (!deviceKey) return null;
+  const [device] = await db
+    .insert(devices)
+    .values({
+      deviceKey,
+      userId,
+      os: deviceInfo?.os ?? "",
+      model: deviceInfo?.model ?? "",
+      browser: deviceInfo?.browser ?? "",
+      lastLoginAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: devices.deviceKey,
+      set: {
+        userId,
+        lastLoginAt: new Date(),
+        os: deviceInfo?.os ?? "",
+        model: deviceInfo?.model ?? "",
+        browser: deviceInfo?.browser ?? "",
+      },
+    })
+    .returning({ id: devices.id });
+  return device?.id ?? null;
+};
+
 const writeAudit = async (
   userId: string,
   action: string,
@@ -156,29 +297,147 @@ const writeAudit = async (
 };
 
 const validateGeofence = (
-  input: AttendancePingInput,
-  schedule: NonNullable<Awaited<ReturnType<typeof getSchedule>>>,
+  coordinates: PingCoordinates & { accuracy: number },
+  targets: GeofenceTarget[],
   accuracyLimitM: number,
 ) => {
-  if (input.accuracy > accuracyLimitM)
+  if (coordinates.accuracy > accuracyLimitM)
     throw new ApiError(
       422,
       "GPS_ACCURACY",
-      `Lokasi belum cukup akurat (${Math.round(input.accuracy)} m, batas ${accuracyLimitM} m).`,
+      `Lokasi belum cukup akurat (${Math.round(coordinates.accuracy)} m, batas ${accuracyLimitM} m).`,
     );
-  const distance = haversineDistanceMeters(
-    input.latitude,
-    input.longitude,
-    schedule.locationLat,
-    schedule.locationLng,
-  );
-  if (distance > schedule.radiusM)
+  const best = nearestTarget(coordinates, targets);
+  if (best.distance > best.target.radiusM)
     throw new ApiError(
       422,
       "OUTSIDE_GEOFENCE",
-      `Anda berada di luar area kerja (${Math.round(distance)} m dari ${schedule.locationName}).`,
+      `Anda berada di luar area kerja (${Math.round(best.distance)} m dari ${best.target.locationName}).`,
     );
-  return Math.round(distance * 100) / 100;
+  return {
+    distance: Math.round(best.distance * 100) / 100,
+    locationId: best.target.locationId,
+    locationName: best.target.locationName,
+  };
+};
+
+type PingCoordinates = { latitude: number; longitude: number };
+
+const nearestTarget = (
+  input: PingCoordinates,
+  targets: GeofenceTarget[],
+) => {
+  let best:
+    | { distance: number; target: GeofenceTarget }
+    | undefined;
+  for (const target of targets) {
+    const distance = haversineDistanceMeters(
+      input.latitude,
+      input.longitude,
+      target.locationLat,
+      target.locationLng,
+    );
+    if (!best || distance < best.distance)
+      best = { distance, target };
+  }
+  if (!best)
+    throw new ApiError(404, "NOT_FOUND", "Lokasi kerja tidak ditemukan.");
+  return best;
+};
+
+// Role Marketing dan HOD tidak diwajibkan berada di radius lokasi (sering
+// dinas di luar); absen mereka cukup foto ber-watermark waktu & tempat.
+const isLocationFree = async (userId: string) => {
+  const [row] = await db
+    .select({ role: user.role })
+    .from(user)
+    .where(eq(user.id, userId))
+    .limit(1);
+  const roleList = (row?.role ?? "")
+    .split(",")
+    .map((role) => role.trim())
+    .filter(Boolean);
+  return LOCATION_FREE_ROLES.some((role) => roleList.includes(role));
+};
+
+type ResolvedPing = {
+  distance: number | null;
+  locationId: string | null;
+  locationName: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  accuracy: number | null;
+};
+
+const resolvePingLocation = (
+  input: AttendancePingInput,
+  targets: GeofenceTarget[],
+  accuracyLimitM: number,
+  locationFree: boolean,
+  fallback: { locationId: string | null; locationName: string | null },
+): ResolvedPing => {
+  const hasCoordinates =
+    input.latitude !== undefined &&
+    input.longitude !== undefined &&
+    input.accuracy !== undefined;
+
+  if (!hasCoordinates) {
+    if (!locationFree)
+      throw new ApiError(
+        422,
+        "LOCATION_REQUIRED",
+        "Aktifkan GPS dan izinkan akses lokasi untuk melakukan absensi.",
+      );
+    return {
+      distance: null,
+      locationId: fallback.locationId,
+      locationName: fallback.locationName,
+      latitude: null,
+      longitude: null,
+      accuracy: null,
+    };
+  }
+
+  const coordinates = { latitude: input.latitude!, longitude: input.longitude! };
+  if (locationFree) {
+    // Catat perkiraan jarak bila memungkinkan, tanpa menolak absen.
+    try {
+      const best = nearestTarget(coordinates, targets);
+      return {
+        distance: Math.round(best.distance * 100) / 100,
+        locationId: best.target.locationId,
+        locationName: best.target.locationName,
+        latitude: coordinates.latitude,
+        longitude: coordinates.longitude,
+        accuracy: input.accuracy!,
+      };
+    } catch {
+      return {
+        distance: null,
+        locationId: fallback.locationId,
+        locationName: fallback.locationName,
+        latitude: coordinates.latitude,
+        longitude: coordinates.longitude,
+        accuracy: input.accuracy!,
+      };
+    }
+  }
+
+  const geofence = validateGeofence(
+    {
+      latitude: coordinates.latitude,
+      longitude: coordinates.longitude,
+      accuracy: input.accuracy!,
+    },
+    targets,
+    accuracyLimitM,
+  );
+  return {
+    ...geofence,
+    latitude: coordinates.latitude,
+    longitude: coordinates.longitude,
+    accuracy: input.accuracy!,
+  };
 };
 
 export async function getToday(userId: string) {
@@ -201,54 +460,98 @@ export async function getToday(userId: string) {
 
 export async function checkIn(userId: string, input: AttendancePingInput) {
   const employee = await requireEmployee(userId);
-  const { timezone, accuracyLimitM } = await getConfig();
+  const { timezone, accuracyLimitM, allowHolidayWork } = await getConfig();
   const date = todayInTimezone(timezone);
+
+  if (input.idempotencyKey) {
+    const [replayed] = await db
+      .select(recordFields)
+      .from(attendanceRecords)
+      .where(
+        and(
+          eq(attendanceRecords.employeeId, employee.id),
+          eq(attendanceRecords.checkInIdempotencyKey, input.idempotencyKey),
+        ),
+      )
+      .limit(1);
+    if (replayed) return replayed;
+  }
 
   const [holiday] = await db
     .select()
     .from(holidays)
     .where(and(eq(holidays.date, date), eq(holidays.active, true)))
     .limit(1);
-  if (holiday && !holiday.allowWork)
-    throw new ApiError(409, "HOLIDAY", `Hari ini libur: ${holiday.name}.`);
+  const isHolidayWork = Boolean(holiday?.allowWork && allowHolidayWork);
+  if (holiday && !isHolidayWork)
+    throw new ApiError(
+      409,
+      "HOLIDAY",
+      holiday.allowWork
+        ? `Absensi hari libur dinonaktifkan: ${holiday.name}.`
+        : `Hari ini libur: ${holiday.name}.`,
+    );
 
   const schedule = await getSchedule(employee.id, date);
   if (!schedule)
     throw new ApiError(409, "NO_SCHEDULE", "Tidak ada jadwal kerja hari ini.");
 
-  const [existing] = await db
-    .select({ id: attendanceRecords.id })
+  const [openRecord] = await db
+    .select({ id: attendanceRecords.id, date: attendanceRecords.date })
     .from(attendanceRecords)
     .where(
       and(
         eq(attendanceRecords.employeeId, employee.id),
-        eq(attendanceRecords.date, date),
+        isNull(attendanceRecords.checkOutTime),
+        gte(attendanceRecords.date, previousDate(date)),
       ),
     )
+    .orderBy(desc(attendanceRecords.date))
     .limit(1);
-  if (existing)
-    throw new ApiError(409, "DUPLICATE_CHECKIN", "Anda sudah melakukan absensi masuk.");
+  if (openRecord)
+    throw new ApiError(
+      409,
+      "DUPLICATE_CHECKIN",
+      openRecord.date === date
+        ? "Anda sudah melakukan absensi masuk."
+        : "Selesaikan absensi pulang shift malam terlebih dahulu.",
+    );
 
-  const distance = validateGeofence(input, schedule, accuracyLimitM);
+  const locationFree = await isLocationFree(userId);
+  const ping = resolvePingLocation(
+    input,
+    schedule.targets,
+    accuracyLimitM,
+    locationFree,
+    { locationId: schedule.locationId, locationName: schedule.locationName },
+  );
+  const deviceId = await resolveDeviceId(
+    userId,
+    input.deviceKey,
+    input.deviceInfo,
+  );
 
   const now = new Date();
   const nowMinutes = minutesInTimezone(timezone, now);
   const late =
     nowMinutes - toMinutes(schedule.startTime) > schedule.toleranceMinutes;
-  const status = late ? "late" : "present";
+  const status = isHolidayWork ? "holiday_work" : late ? "late" : "present";
 
   const [record] = await db
     .insert(attendanceRecords)
     .values({
       employeeId: employee.id,
       workScheduleId: schedule.id,
-      workLocationId: schedule.locationId,
+      workLocationId: ping.locationId ?? schedule.locationId,
       date,
       checkInTime: now,
-      checkInLatitude: input.latitude,
-      checkInLongitude: input.longitude,
-      checkInAccuracy: input.accuracy,
-      checkInDistance: distance,
+      checkInLatitude: ping.latitude,
+      checkInLongitude: ping.longitude,
+      checkInAccuracy: ping.accuracy,
+      checkInDistance: ping.distance,
+      checkInIdempotencyKey: input.idempotencyKey ?? null,
+      deviceId,
+      ...(input.placeNote ? { notes: input.placeNote } : {}),
       status,
     })
     .returning(recordFields);
@@ -275,9 +578,24 @@ export async function checkIn(userId: string, input: AttendancePingInput) {
   await writeAudit(userId, "check-in", record.id, {
     date,
     status,
-    distance,
-    accuracy: input.accuracy,
-    location: schedule.locationName,
+    distance: ping.distance,
+    accuracy: ping.accuracy,
+    location: ping.locationName,
+    placeNote: input.placeNote ?? null,
+    locationFree,
+    deviceId,
+  });
+
+  notifyUserInBackground(userId, {
+    event: "attendance-check-in",
+    type: "attendance",
+    title: "Absensi masuk berhasil",
+    body:
+      status === "late"
+        ? `Tercatat terlambat hari ini. Jadwal mulai ${schedule.startTime}, batas toleransi ${schedule.toleranceMinutes} menit.`
+        : status === "holiday_work"
+          ? "Kehadiran hari libur tercatat sebagai kerja hari libur."
+          : "Kehadiranmu sudah tercatat untuk hari ini.",
   });
 
   return updated;
@@ -288,31 +606,98 @@ export async function checkOut(userId: string, input: AttendancePingInput) {
   const { timezone, accuracyLimitM } = await getConfig();
   const date = todayInTimezone(timezone);
 
+  if (input.idempotencyKey) {
+    const [replayed] = await db
+      .select(recordFields)
+      .from(attendanceRecords)
+      .where(
+        and(
+          eq(attendanceRecords.employeeId, employee.id),
+          eq(attendanceRecords.checkOutIdempotencyKey, input.idempotencyKey),
+        ),
+      )
+      .limit(1);
+    if (replayed) return replayed;
+  }
+
   const [record] = await db
     .select(recordFields)
     .from(attendanceRecords)
     .where(
       and(
         eq(attendanceRecords.employeeId, employee.id),
-        eq(attendanceRecords.date, date),
+        isNull(attendanceRecords.checkOutTime),
+        gte(attendanceRecords.date, previousDate(date)),
       ),
     )
+    .orderBy(desc(attendanceRecords.date))
     .limit(1);
-  if (!record || !record.checkInTime)
+  if (!record || !record.checkInTime) {
+    const [closedToday] = await db
+      .select({ id: attendanceRecords.id })
+      .from(attendanceRecords)
+      .where(
+        and(
+          eq(attendanceRecords.employeeId, employee.id),
+          eq(attendanceRecords.date, date),
+          isNotNull(attendanceRecords.checkOutTime),
+        ),
+      )
+      .limit(1);
+    if (closedToday)
+      throw new ApiError(
+        409,
+        "DUPLICATE_CHECKOUT",
+        "Anda sudah melakukan absensi pulang.",
+      );
     throw new ApiError(409, "NO_CHECKIN", "Belum ada absensi masuk hari ini.");
-  if (record.checkOutTime)
-    throw new ApiError(409, "DUPLICATE_CHECKOUT", "Anda sudah melakukan absensi pulang.");
+  }
 
-  const schedule = await getSchedule(employee.id, date);
-  if (!schedule)
-    throw new ApiError(409, "NO_SCHEDULE", "Tidak ada jadwal kerja hari ini.");
+  const isToday = record.date === date;
+  const schedule = isToday
+    ? await getSchedule(employee.id, date)
+    : await getScheduleById(record.workScheduleId ?? "");
+  if (!schedule || (!isToday && !schedule.crossesMidnight))
+    throw new ApiError(
+      409,
+      "NO_CHECKIN",
+      "Absensi masuk tidak ditemukan untuk jadwal hari ini.",
+    );
 
-  const distance = validateGeofence(input, schedule, accuracyLimitM);
+  const location = isToday
+    ? schedule
+    : record.workLocationId
+      ? await getRecordLocation(record.workLocationId)
+      : null;
+  if (!location)
+    throw new ApiError(404, "NOT_FOUND", "Lokasi kerja tidak ditemukan.");
+  const locationFree = await isLocationFree(userId);
+  const ping = resolvePingLocation(
+    input,
+    location.targets,
+    accuracyLimitM,
+    locationFree,
+    { locationId: null, locationName: null },
+  );
 
   const now = new Date();
   const nowMinutes = minutesInTimezone(timezone, now);
-  const early = nowMinutes < toMinutes(schedule.endTime);
-  const status = early ? "early_leave" : record.status;
+  const nowAbsolute = daysBetween(record.date, date) * 1440 + nowMinutes;
+  const endAbsolute =
+    (schedule.crossesMidnight ? 1440 : 0) + toMinutes(schedule.endTime);
+  const early = nowAbsolute < endAbsolute;
+  const status =
+    record.status === "holiday_work"
+      ? "holiday_work"
+      : early
+        ? "early_leave"
+        : record.status;
+
+  const deviceId = await resolveDeviceId(
+    userId,
+    input.deviceKey,
+    input.deviceInfo,
+  );
 
   const stored = await storePhoto(input.photo, `${record.id}-check-out`);
   const [photo] = await db
@@ -331,12 +716,15 @@ export async function checkOut(userId: string, input: AttendancePingInput) {
     .update(attendanceRecords)
     .set({
       checkOutTime: now,
-      checkOutLatitude: input.latitude,
-      checkOutLongitude: input.longitude,
-      checkOutAccuracy: input.accuracy,
-      checkOutDistance: distance,
+      checkOutLatitude: ping.latitude,
+      checkOutLongitude: ping.longitude,
+      checkOutAccuracy: ping.accuracy,
+      checkOutDistance: ping.distance,
       checkOutPhotoId: photo.id,
+      checkOutIdempotencyKey: input.idempotencyKey ?? null,
+      deviceId,
       status,
+      ...(input.placeNote ? { notes: input.placeNote } : {}),
     })
     .where(eq(attendanceRecords.id, record.id))
     .returning(recordFields);
@@ -344,9 +732,22 @@ export async function checkOut(userId: string, input: AttendancePingInput) {
   await writeAudit(userId, "check-out", record.id, {
     date,
     status,
-    distance,
-    accuracy: input.accuracy,
-    location: schedule.locationName,
+    distance: ping.distance,
+    accuracy: ping.accuracy,
+    location: ping.locationName,
+    placeNote: input.placeNote ?? null,
+    locationFree,
+    deviceId,
+  });
+
+  notifyUserInBackground(userId, {
+    event: "attendance-check-out",
+    type: "attendance",
+    title: "Absensi pulang berhasil",
+    body:
+      status === "early_leave"
+        ? "Tercatat pulang cepat. Pulang lebih awal dari jadwal."
+        : "Absensi pulang sudah tercatat.",
   });
 
   return updated;
@@ -358,8 +759,16 @@ export async function listHistory(
 ) {
   const employee = await requireEmployee(userId);
   const conditions = [eq(attendanceRecords.employeeId, employee.id)];
+  if (query.month) {
+    const [year, month] = query.month.split("-").map(Number);
+    const first = `${query.month}-01`;
+    const last = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
+    conditions.push(gte(attendanceRecords.date, first));
+    conditions.push(lte(attendanceRecords.date, last));
+  }
   if (query.from) conditions.push(gte(attendanceRecords.date, query.from));
   if (query.to) conditions.push(lte(attendanceRecords.date, query.to));
+  if (query.status) conditions.push(eq(attendanceRecords.status, query.status));
 
   const rows = await db
     .select(recordFields)
@@ -376,5 +785,79 @@ export async function listHistory(
       offset: query.offset,
       hasMore: rows.length > query.limit,
     },
+  };
+}
+
+export async function getAttendanceDetail(
+  userId: string,
+  canReadAny: boolean,
+  id: string,
+) {
+  const [record] = await db
+    .select({
+      ...recordFields,
+      employeeName: employees.fullName,
+      locationName: workLocations.name,
+    })
+    .from(attendanceRecords)
+    .innerJoin(employees, eq(employees.id, attendanceRecords.employeeId))
+    .innerJoin(workLocations, eq(workLocations.id, attendanceRecords.workLocationId))
+    .where(eq(attendanceRecords.id, id))
+    .limit(1);
+  if (!record) throw new ApiError(404, "NOT_FOUND", "Absensi tidak ditemukan.");
+
+  if (!canReadAny) {
+    const employee = await requireEmployee(userId);
+    if (record.employeeId !== employee.id)
+      throw new ApiError(404, "NOT_FOUND", "Absensi tidak ditemukan.");
+  }
+
+  const photos = await db
+    .select({
+      id: attendancePhotos.id,
+      type: attendancePhotos.type,
+      mimeType: attendancePhotos.mimeType,
+      capturedAt: attendancePhotos.capturedAt,
+    })
+    .from(attendancePhotos)
+    .where(eq(attendancePhotos.attendanceId, id));
+
+  return { record, photos };
+}
+
+export async function getPhotoForViewer(
+  userId: string,
+  canReadAny: boolean,
+  photoId: string,
+) {
+  const [row] = await db
+    .select({
+      storageKey: attendancePhotos.storageKey,
+      mimeType: attendancePhotos.mimeType,
+      employeeId: attendanceRecords.employeeId,
+    })
+    .from(attendancePhotos)
+    .innerJoin(
+      attendanceRecords,
+      eq(attendanceRecords.id, attendancePhotos.attendanceId),
+    )
+    .where(eq(attendancePhotos.id, photoId))
+    .limit(1);
+  if (!row) throw new ApiError(404, "NOT_FOUND", "Foto tidak ditemukan.");
+
+  if (!canReadAny) {
+    const employee = await requireEmployee(userId);
+    if (row.employeeId !== employee.id)
+      throw new ApiError(404, "NOT_FOUND", "Foto tidak ditemukan.");
+  }
+
+  return {
+    absolutePath: resolve(
+      process.cwd(),
+      "storage",
+      "attendance-photos",
+      row.storageKey,
+    ),
+    mimeType: row.mimeType,
   };
 }

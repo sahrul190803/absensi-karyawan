@@ -7,6 +7,7 @@ import { db } from "@/db";
 import * as schema from "@/db/schema";
 import { siteConfig } from "@/config/site";
 import { env } from "@/lib/env";
+import { sendMailInBackground } from "@/lib/mail";
 import { ac, ADMIN_ROLES, DEFAULT_ROLE, roles } from "@/lib/permissions";
 
 export const auth = betterAuth({
@@ -15,12 +16,33 @@ export const auth = betterAuth({
   secret: env.BETTER_AUTH_SECRET,
   database: drizzleAdapter(db, { provider: "pg", schema }),
   advanced: { cookiePrefix: `ngodingpakeai-${siteConfig.id}` },
+  // Aktifkan selalu (default hanya di production) supaya perilaku dev dan
+  // prod sama. Aturan khusus: sign-in/sign-up 3x per 10 dtk, reset password
+  // 3x per menit; endpoint lain memakai window/max umum di bawah.
+  rateLimit: { enabled: true, window: 10, max: 100 },
   emailAndPassword: {
     enabled: true,
     minPasswordLength: 8,
     maxPasswordLength: 128,
-    // Add an email provider before enabling verification or password recovery.
     requireEmailVerification: false,
+    revokeSessionsOnPasswordReset: true,
+    sendResetPassword: async ({ user, url }) => {
+      sendMailInBackground({
+        to: user.email,
+        subject: "Atur ulang kata sandi Hadirku Lecarassa",
+        text: `Halo ${user.name},\n\nKlik tautan berikut untuk mengatur ulang kata sandi Anda (berlaku 1 jam):\n${url}\n\nJika Anda tidak meminta pengaturan ulang ini, abaikan email ini.`,
+      });
+    },
+    onPasswordReset: async ({ user }, request) => {
+      await db.insert(schema.auditLogs).values({
+        userId: user.id,
+        action: "password-reset",
+        entity: "user",
+        entityId: user.id,
+        newValue: { email: user.email },
+        userAgent: request?.headers?.get("user-agent") ?? undefined,
+      });
+    },
   },
   plugins: [
     // Roles come from the access control in lib/permissions.ts. New accounts get

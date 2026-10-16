@@ -8,12 +8,24 @@ const dataUrl = z
 
 export const attendancePingSchema = z
   .object({
-    latitude: coordinate.min(-90).max(90),
-    longitude: coordinate.min(-180).max(180),
-    accuracy: z.coerce.number().positive().max(10_000),
+    // Lokasi bersifat opsional: role Marketing dan HOD sering dinas di luar
+    // sehingga absen cukup dengan foto ber-watermark. Karyawan biasa tetap
+    // wajib mengirim koordinat (divalidasi di service).
+    latitude: coordinate.min(-90).max(90).optional(),
+    longitude: coordinate.min(-180).max(180).optional(),
+    accuracy: z.coerce.number().positive().max(10_000).optional(),
     photo: dataUrl,
     deviceKey: z.string().trim().min(1).max(160).optional(),
     idempotencyKey: z.string().trim().min(8).max(64).optional(),
+    deviceInfo: z
+      .object({
+        os: z.string().trim().min(1).max(64),
+        model: z.string().trim().min(1).max(80),
+        browser: z.string().trim().min(1).max(64),
+      })
+      .optional(),
+    // Keterangan tempat manual untuk absen tanpa GPS (mis. kunjungan klien).
+    placeNote: z.string().trim().max(200).optional(),
   })
   .strict();
 
@@ -28,6 +40,13 @@ export const attendanceHistorySchema = z
     to: z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional(),
+    month: z
+      .string()
+      .regex(/^\d{4}-\d{2}$/)
+      .optional(),
+    status: z
+      .enum(["present", "late", "early_leave", "alpha", "holiday_work"])
       .optional(),
   })
   .strict();

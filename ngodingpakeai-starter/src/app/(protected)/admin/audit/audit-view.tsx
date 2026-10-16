@@ -79,7 +79,7 @@ export function AuditView() {
       <label className="mt-4 grid max-w-xs gap-1.5 text-sm">
         <span className="font-medium">Filter aksi</span>
         <select
-          className="h-10 w-full rounded-lg border bg-transparent px-3 text-sm"
+          className="h-10 w-full rounded-md border border-border bg-card px-3 text-sm"
           value={action}
           onChange={(event) => {
             setAction(event.target.value);
@@ -98,7 +98,7 @@ export function AuditView() {
       {error && (
         <p
           role="alert"
-          className="mt-4 rounded-xl border border-destructive/40 bg-card px-4 py-3 text-sm text-destructive"
+          className="mt-4 rounded-lg border border-danger/40 bg-card px-4 py-3 text-sm text-danger"
         >
           {error}
         </p>
@@ -107,7 +107,7 @@ export function AuditView() {
       {loading ? (
         <p className="mt-6 text-sm text-muted-foreground">Memuat…</p>
       ) : items.length === 0 ? (
-        <div className="mt-6 rounded-2xl border border-dashed bg-card px-6 py-10 text-center">
+        <div className="mt-6 rounded-lg border border-dashed bg-card px-6 py-10 text-center">
           <p className="text-sm text-muted-foreground">
             Belum ada aktivitas tercatat.
           </p>
@@ -115,7 +115,7 @@ export function AuditView() {
       ) : (
         <ul className="mt-6 grid gap-3">
           {items.map((item) => (
-            <li key={item.id} className="rounded-2xl border bg-card p-4">
+            <li key={item.id} className="rounded-lg border bg-card p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="font-medium">
                   {actionLabels[item.action] ?? item.action}

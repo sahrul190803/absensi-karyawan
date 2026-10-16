@@ -1,23 +1,19 @@
-import { redirect } from "next/navigation";
 import { Brand } from "@/components/brand";
-import { getSession } from "@/lib/session";
-import { siteConfig } from "@/config/site";
 
-export default async function AuthLayout({
+export default function AuthLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  if (await getSession()) redirect(siteConfig.homePath);
   return (
-    <div className="min-h-svh">
-      <header className="mx-auto max-w-6xl px-6 py-6 sm:px-10">
-        <Brand />
+    <div className="flex min-h-dvh flex-col bg-background">
+      <header className="mx-auto flex w-full max-w-5xl items-center justify-between px-6 py-5">
+        <Brand href="/" />
+        <span className="rounded-md border border-border bg-card px-2.5 py-1 font-mono text-xs text-muted-foreground">
+          Absensi Karyawan
+        </span>
       </header>
-      <main
-        id="main-content"
-        className="mx-auto flex min-h-[75svh] max-w-6xl items-center justify-center px-6 py-12"
-      >
+      <main className="flex flex-1 items-center justify-center px-6 pb-16">
         {children}
       </main>
     </div>

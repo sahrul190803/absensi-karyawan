@@ -35,6 +35,8 @@ export async function listAnyAttendance(query: AdminAttendanceListInput) {
       checkOutTime: attendanceRecords.checkOutTime,
       status: attendanceRecords.status,
       checkInDistance: attendanceRecords.checkInDistance,
+      checkInPhotoId: attendanceRecords.checkInPhotoId,
+      checkOutPhotoId: attendanceRecords.checkOutPhotoId,
       employeeName: employees.fullName,
       employeeNik: employees.nik,
       locationName: workLocations.name,

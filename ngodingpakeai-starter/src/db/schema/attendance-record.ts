@@ -24,9 +24,11 @@ export const attendanceRecords = pgTable(
     workScheduleId: uuid("work_schedule_id").references(() => workSchedules.id, {
       onDelete: "set null",
     }),
-    workLocationId: uuid("work_location_id")
-      .notNull()
-      .references(() => workLocations.id, { onDelete: "restrict" }),
+    // Nullable: absensi tanpa geofence (HOD, Marketing, HRD) mungkin tidak
+    // punya lokasi kerja terjadwal.
+    workLocationId: uuid("work_location_id").references(() => workLocations.id, {
+      onDelete: "restrict",
+    }),
     date: date("date").notNull(),
     checkInTime: timestamp("check_in_time", { withTimezone: true }),
     checkOutTime: timestamp("check_out_time", { withTimezone: true }),
@@ -43,6 +45,8 @@ export const attendanceRecords = pgTable(
     deviceId: uuid("device_id").references(() => devices.id, {
       onDelete: "set null",
     }),
+    checkInIdempotencyKey: varchar("check_in_idempotency_key", { length: 64 }),
+    checkOutIdempotencyKey: varchar("check_out_idempotency_key", { length: 64 }),
     status: varchar("status", { length: 24 }).notNull(),
     notes: text("notes").default("").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -61,5 +65,11 @@ export const attendanceRecords = pgTable(
     index("attendance_records_date_idx").on(table.date),
     index("attendance_records_status_idx").on(table.status),
     index("attendance_records_location_idx").on(table.workLocationId),
+    uniqueIndex("attendance_records_check_in_idempotency_key").on(
+      table.checkInIdempotencyKey,
+    ),
+    uniqueIndex("attendance_records_check_out_idempotency_key").on(
+      table.checkOutIdempotencyKey,
+    ),
   ],
 );

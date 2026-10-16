@@ -9,8 +9,8 @@ src/
     (auth)/                     sign-in and sign-up pages
     (protected)/app/page.tsx     blank, authenticated application
     api/auth/[...all]/route.ts   Better Auth's HTTP endpoints
-    api/notes/route.ts           authenticated list/create example
-    api/notes/[id]/route.ts      authenticated read/update/delete example
+    api/requests/route.ts        authenticated list/create example
+    api/requests/[id]/route.ts   authenticated update/cancel example
   components/
     ui/                         shadcn/ui source, owned by this project
     auth-form.tsx               interactive signin/signup form
@@ -23,10 +23,10 @@ src/
       session.ts                Better Auth session table
       account.ts                Better Auth provider/password table
       verification.ts           Better Auth verification table
-      notes.ts                  example user-owned application table
+      request.ts                example user-owned application table
     index.ts                    server-only PostgreSQL/Drizzle pool
-  services/notes.service.ts     application rules and all Notes queries
-  validators/notes.ts           strict request validation and input types
+  services/requests.service.ts  application rules and all Requests queries
+  validators/requests.ts        strict request validation and input types
   lib/
     api.ts                      API session, origin, JSON, and error helpers
     auth.ts                     server-side Better Auth configuration
@@ -46,7 +46,7 @@ The browser form calls Better Auth through `/api/auth`. Better Auth validates cr
 
 Authentication at a layout is a UI gate. New actions and APIs must authenticate independently and filter user-owned rows by `session.user.id`. Return 401 from APIs for missing sessions; do not redirect an API client to an HTML signin page. Return a not-found result for a row the user does not own.
 
-Application requests follow **API route → session/validation → service → Drizzle**. The [backend guide](backend.md) defines the HTTP contract and a complete CRUD example. Services receive a verified user ID and enforce ownership in their queries. The API layer owns request parsing, responses, mutation origin checks, and JSON errors. Database queries stay out of routes and components. Notes is a reference backend; its UI is left for feature work.
+Application requests follow **API route → session/validation → service → Drizzle**. The [backend guide](backend.md) defines the HTTP contract and a complete CRUD example. Services receive a verified user ID and enforce ownership in their queries. The API layer owns request parsing, responses, mutation origin checks, and JSON errors. Database queries stay out of routes and components. The Requests module is a reference backend with both employee and HRD screens.
 
 ## Data and configuration
 

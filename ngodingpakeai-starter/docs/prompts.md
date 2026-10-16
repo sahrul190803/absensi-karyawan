@@ -26,4 +26,4 @@
 
 ## Another backend feature
 
-> Read AGENTS.md and use build-feature. Add a bookmarks API following the Notes backend standard: authenticated API routes, strict validation, all Drizzle queries in services, and a separate schema file. Each user should only access their own bookmarks. Generate a migration and test CRUD and account isolation.
+> Read AGENTS.md and use build-feature. Add a bookmarks API following the Requests backend standard: authenticated API routes, strict validation, all Drizzle queries in services, and a separate schema file. Each user should only access their own bookmarks. Generate a migration and test CRUD and account isolation.

@@ -25,10 +25,10 @@ test("PostgreSQL migrations preserve rows on rerun and enforce auth constraints"
       "INSERT INTO session (id, token, expires_at, user_id) VALUES ($1, $2, $3, $4)",
       ["session-one", "token-one", new Date(Date.now() + 60000), "one"],
     );
-    await db.query("INSERT INTO notes (title, user_id) VALUES ($1, $2)", [
-      "Migration persistence",
-      "one",
-    ]);
+    await db.query(
+      "INSERT INTO requests (user_id, type, start_date, reason) VALUES ($1, $2, $3, $4)",
+      ["one", "leave", "2026-10-12", "Migration persistence"],
+    );
     const result = spawnSync(process.execPath, ["scripts/migrate.mjs"], {
       cwd: root,
       env: { ...process.env, DATABASE_URL: url, MIGRATION_DATABASE_URL: url },
@@ -63,25 +63,25 @@ test("PostgreSQL migrations preserve rows on rerun and enforce auth constraints"
       ),
       { code: "23503" },
     );
-    const note = (
+    const request = (
       await db.query(
-        "SELECT id, content, created_at FROM notes WHERE user_id = $1",
+        "SELECT id, status, created_at FROM requests WHERE user_id = $1",
         ["one"],
       )
     ).rows[0];
-    assert.match(note.id, /^[0-9a-f-]{36}$/);
-    assert.equal(note.content, "");
-    assert.ok(note.created_at instanceof Date);
+    assert.match(request.id, /^[0-9a-f-]{36}$/);
+    assert.equal(request.status, "pending");
+    assert.ok(request.created_at instanceof Date);
     await assert.rejects(
-      db.query("INSERT INTO notes (title, user_id) VALUES ($1, $2)", [
-        "Orphan",
-        "missing",
-      ]),
+      db.query(
+        "INSERT INTO requests (user_id, type, start_date, reason) VALUES ($1, $2, $3, $4)",
+        ["missing", "leave", "2026-10-12", "Orphan"],
+      ),
       { code: "23503" },
     );
     await db.query('DELETE FROM "user" WHERE id = $1', ["one"]);
     assert.equal(
-      (await db.query("SELECT count(*)::int AS count FROM notes")).rows[0]
+      (await db.query("SELECT count(*)::int AS count FROM requests")).rows[0]
         .count,
       0,
     );

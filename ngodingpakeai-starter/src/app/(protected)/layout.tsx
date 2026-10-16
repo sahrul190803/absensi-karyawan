@@ -1,6 +1,7 @@
-import { Brand } from "@/components/brand";
-import { SignOutButton } from "@/components/sign-out-button";
+import { AppShell } from "@/components/app-shell";
+import { navForRoles } from "@/lib/nav";
 import { requireSession } from "@/lib/session";
+import { ROLE_LABELS } from "@/lib/permissions";
 
 export const runtime = "nodejs";
 
@@ -9,21 +10,22 @@ export default async function ProtectedLayout({
 }: {
   children: React.ReactNode;
 }) {
-  await requireSession();
+  const session = await requireSession();
+  const roleList = (session.user.role ?? "user")
+    .split(",")
+    .map((role) => role.trim())
+    .filter(Boolean);
+  const items = navForRoles(roleList);
+  const roleLabel =
+    roleList.map((role) => ROLE_LABELS[role] ?? role).join(" · ") || "Karyawan";
+
   return (
-    <>
-      <header className="border-b bg-card">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-5 sm:px-10">
-          <Brand />
-          <SignOutButton />
-        </div>
-      </header>
-      <main
-        id="main-content"
-        className="mx-auto max-w-6xl px-6 py-12 sm:px-10 sm:py-16"
-      >
-        {children}
-      </main>
-    </>
+    <AppShell
+      user={{ name: session.user.name, email: session.user.email }}
+      roleLabel={roleLabel}
+      items={items}
+    >
+      {children}
+    </AppShell>
   );
 }

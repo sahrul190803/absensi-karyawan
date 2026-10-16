@@ -1,7 +1,12 @@
 import "server-only";
-import { and, asc, eq, gte, lte, type SQL } from "drizzle-orm";
+import { and, asc, eq, gte, isNull, lte, or, type SQL } from "drizzle-orm";
 import { db } from "@/db";
-import { attendanceRecords, departments, employees } from "@/db/schema";
+import {
+  attendanceRecords,
+  departments,
+  employees,
+  requests,
+} from "@/db/schema";
 import type { ReportQueryInput } from "@/validators/reports";
 
 type Bucket = {
@@ -9,6 +14,7 @@ type Bucket = {
   terlambat: number;
   pulangCepat: number;
   alpha: number;
+  lemburJam: number;
 };
 
 const emptyBucket = (): Bucket => ({
@@ -16,7 +22,17 @@ const emptyBucket = (): Bucket => ({
   terlambat: 0,
   pulangCepat: 0,
   alpha: 0,
+  lemburJam: 0,
 });
+
+const overtimeHours = (startTime: string | null, endTime: string | null) => {
+  if (!startTime || !endTime) return 0;
+  const [startHour, startMinute] = startTime.split(":").map(Number);
+  const [endHour, endMinute] = endTime.split(":").map(Number);
+  let minutes = endHour * 60 + endMinute - (startHour * 60 + startMinute);
+  if (minutes < 0) minutes += 1440;
+  return Math.round((minutes / 60) * 100) / 100;
+};
 
 export async function getAttendanceReport(query: ReportQueryInput) {
   const now = new Date();
@@ -34,6 +50,7 @@ export async function getAttendanceReport(query: ReportQueryInput) {
   const staff = await db
     .select({
       id: employees.id,
+      userId: employees.userId,
       fullName: employees.fullName,
       nik: employees.nik,
       departmentName: departments.name,
@@ -75,9 +92,35 @@ export async function getAttendanceReport(query: ReportQueryInput) {
     counts.set(record.employeeId, bucket);
   }
 
+  const overtimeRows = await db
+    .select({
+      userId: requests.userId,
+      startTime: requests.startTime,
+      endTime: requests.endTime,
+    })
+    .from(requests)
+    .where(
+      and(
+        eq(requests.type, "overtime"),
+        eq(requests.status, "approved"),
+        lte(requests.startDate, to),
+        or(isNull(requests.endDate), gte(requests.endDate, from)),
+      ),
+    );
+  const overtimeByUser = new Map<string, number>();
+  for (const row of overtimeRows) {
+    overtimeByUser.set(
+      row.userId,
+      (overtimeByUser.get(row.userId) ?? 0) +
+        overtimeHours(row.startTime, row.endTime),
+    );
+  }
+
   const data = staff.map((person) => ({
     ...person,
     ...(counts.get(person.id) ?? emptyBucket()),
+    lemburJam:
+      Math.round((overtimeByUser.get(person.userId) ?? 0) * 100) / 100,
   }));
 
   const totals = data.reduce(
@@ -86,6 +129,7 @@ export async function getAttendanceReport(query: ReportQueryInput) {
       terlambat: acc.terlambat + row.terlambat,
       pulangCepat: acc.pulangCepat + row.pulangCepat,
       alpha: acc.alpha + row.alpha,
+      lemburJam: Math.round((acc.lemburJam + row.lemburJam) * 100) / 100,
     }),
     emptyBucket(),
   );

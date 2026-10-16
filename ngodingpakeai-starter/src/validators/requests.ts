@@ -8,8 +8,16 @@ const typeEnum = z.enum([
   "leave",
   "business_trip",
   "overtime",
+  "shift_swap",
 ]);
 const statusEnum = z.enum(["pending", "approved", "rejected", "cancelled"]);
+const attachmentDataUrl = z
+  .string()
+  .regex(
+    /^data:(?:image\/(?:jpeg|png|webp)|application\/pdf);base64,[A-Za-z0-9+/=]+$/,
+  )
+  .max(4_000_000)
+  .optional();
 
 export const createRequestSchema = z
   .object({
@@ -19,11 +27,17 @@ export const createRequestSchema = z
     startTime: clockTime.optional(),
     endTime: clockTime.optional(),
     reason: z.string().trim().min(3).max(1000),
+    attachment: attachmentDataUrl,
   })
   .strict()
   .refine(
     (value) => !value.endDate || value.endDate >= value.startDate,
     "Tanggal selesai tidak boleh sebelum tanggal mulai.",
+  )
+  .refine(
+    (value) =>
+      value.type !== "overtime" || (value.startTime && value.endTime),
+    "Lembur wajib mengisi jam mulai dan jam selesai.",
   );
 
 export const decisionSchema = z

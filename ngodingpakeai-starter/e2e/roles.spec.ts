@@ -50,8 +50,9 @@ test("admin endpoints answer 401 without a session, not 403", async ({
   request,
 }) => {
   for (const [method, url] of [
-    ["GET", "/api/admin/notes"],
-    ["DELETE", `/api/admin/notes/${randomUUID()}`],
+    ["GET", "/api/admin/trainings"],
+    ["DELETE", `/api/admin/trainings/${randomUUID()}`],
+    ["GET", "/api/admin/finance/summary?period=month"],
   ]) {
     const response = await request.fetch(url, { method, headers });
     expect(response.status()).toBe(401);
@@ -61,19 +62,13 @@ test("admin endpoints answer 401 without a session, not 403", async ({
   }
 });
 
-test("the default role cannot reach another account's notes", async ({
-  request,
-}) => {
+test("the default role cannot reach admin resources", async ({ request }) => {
   await signUp(request, "Default Role");
-  const create = await request.post("/api/notes", {
-    headers,
-    data: { title: "Only mine" },
-  });
-  expect(create.status()).toBe(201);
 
   for (const [method, url] of [
-    ["GET", "/api/admin/notes"],
-    ["DELETE", `/api/admin/notes/${randomUUID()}`],
+    ["GET", "/api/admin/trainings"],
+    ["DELETE", `/api/admin/trainings/${randomUUID()}`],
+    ["GET", "/api/admin/finance/summary?period=month"],
   ]) {
     const response = await request.fetch(url, { method, headers });
     expect(response.status()).toBe(403);
@@ -81,62 +76,57 @@ test("the default role cannot reach another account's notes", async ({
   }
 });
 
-test("a granted role reaches every account, and losing it revokes access", async ({
-  browser,
+test("a granted role unlocks admin resources, and losing it revokes access", async ({
   request,
 }) => {
-  // One ordinary account with a note nobody else should see.
-  const ownerContext = await browser.newContext();
-  const owner = ownerContext.request;
-  await signUp(owner, "Note Owner");
-  const created = await owner.post("/api/notes", {
-    headers,
-    data: { title: "Owned by someone else" },
-  });
-  expect(created.status()).toBe(201);
-  const noteId = (await created.json()).data.id;
-
   const adminEmail = await signUp(request, "Role Holder");
-  expect((await request.get("/api/admin/notes", { headers })).status()).toBe(
+  expect((await request.get("/api/admin/trainings", { headers })).status()).toBe(
     403,
   );
 
   await setRole(adminEmail, "admin");
 
   // The check reads the stored role, so the existing session is enough.
-  const listed = await request.get("/api/admin/notes", { headers });
+  const listed = await request.get("/api/admin/trainings", { headers });
   expect(listed.status()).toBe(200);
-  const body = await listed.json();
-  expect(
-    body.data.some(
-      (note: { id: string; ownerEmail: string }) => note.id === noteId,
-    ),
-  ).toBe(true);
-  expect(body.data[0]).toHaveProperty("ownerEmail");
+  expect((await listed.json()).data).toBeInstanceOf(Array);
 
-  // Cross-account deletes still require the configured Origin.
-  const wrongOrigin = await request.delete(`/api/admin/notes/${noteId}`, {
-    headers: { Origin: "https://untrusted.example" },
+  // Mutations behind a permission guard require the configured Origin.
+  const created = await request.post("/api/admin/trainings", {
+    headers,
+    data: {
+      title: `Roles test ${randomUUID().slice(0, 8)}`,
+      date: "2026-11-03",
+      startTime: "09:00",
+      endTime: "11:00",
+      place: "Ruang test",
+      notes: "",
+    },
   });
+  expect(created.status()).toBe(201);
+  const trainingId = (await created.json()).data.id as string;
+
+  const wrongOrigin = await request.delete(
+    `/api/admin/trainings/${trainingId}`,
+    { headers: { Origin: "https://untrusted.example" } },
+  );
   expect(wrongOrigin.status()).toBe(403);
   expect((await wrongOrigin.json()).error.code).toBe("FORBIDDEN_ORIGIN");
 
-  const removed = await request.delete(`/api/admin/notes/${noteId}`, {
+  const removed = await request.delete(`/api/admin/trainings/${trainingId}`, {
     headers,
   });
   expect(removed.status()).toBe(204);
   expect(
-    (await (await owner.get("/api/notes", { headers })).json()).data,
-  ).toEqual([]);
-  expect(
-    (await request.delete(`/api/admin/notes/${noteId}`, { headers })).status(),
+    (
+      await request.delete(`/api/admin/trainings/${trainingId}`, { headers })
+    ).status(),
   ).toBe(404);
 
   await setRole(adminEmail, "user");
-  expect((await request.get("/api/admin/notes", { headers })).status()).toBe(
+  expect((await request.get("/api/admin/trainings", { headers })).status()).toBe(
     403,
   );
-  await ownerContext.close();
 });
 
 test("the admin page and its link appear only for a permitted role", async ({
@@ -144,20 +134,130 @@ test("the admin page and its link appear only for a permitted role", async ({
 }) => {
   const email = `roles-${randomUUID()}@example.com`;
   await page.goto("/sign-up");
-  await page.getByLabel("Name").fill("Page Viewer");
+  await page.getByLabel("Nama lengkap").fill("Page Viewer");
   await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill("Roles-test-password-123!");
-  await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("heading", { name: /Welcome, / })).toBeVisible();
+  await page.getByLabel("Kata sandi").fill("Roles-test-password-123!");
+  await page.getByRole("button", { name: "Buat akun" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Halo, Page Viewer" }),
+  ).toBeVisible();
 
-  await expect(page.getByRole("link", { name: "Open admin" })).toHaveCount(0);
+  // Tanpa izin, halaman admin tidak dirender (404) dan bukan sekadar disembunyikan.
   await page.goto("/admin");
-  await expect(page.getByText("Every account’s notes")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Dashboard" })).toHaveCount(
+    0,
+  );
 
   await setRole(email, "admin");
-  await page.goto("/app");
-  await page.getByRole("link", { name: "Open admin" }).click();
+  await page.goto("/admin");
   await expect(
-    page.getByRole("heading", { name: "Every account’s notes" }),
+    page.getByRole("heading", { name: "Dashboard" }),
   ).toBeVisible();
+});
+
+test("HRD mengatur kuota cuti, karyawan melihat saldo, HOD tidak boleh", async ({
+  browser,
+}) => {
+  const hrdContext = await browser.newContext();
+  const employeeContext = await browser.newContext();
+  const hodContext = await browser.newContext();
+  const hrd = hrdContext.request;
+  const employee = employeeContext.request;
+  const hod = hodContext.request;
+  const pool = new Pool({
+    connectionString: process.env.STARTER_TEST_DATABASE_URL,
+    max: 2,
+  });
+  try {
+    const leaveType = await pool.query(
+      "insert into leave_types (name, default_quota) values ($1, $2) returning id",
+      [`Cuti Uji ${randomUUID().slice(0, 8)}`, 12],
+    );
+    const leaveTypeId = leaveType.rows[0].id as string;
+
+    const employeeEmail = await signUp(employee, "Kuota Karyawan");
+    const employeeUserId = (
+      await pool.query('select id from "user" where email = $1', [
+        employeeEmail,
+      ])
+    ).rows[0].id as string;
+    const employeeRow = await pool.query(
+      "insert into employees (user_id, nik, full_name, employment_status) values ($1, $2, $3, 'active') returning id",
+      [employeeUserId, `NIK-${randomUUID().slice(0, 8)}`, "Kuota Karyawan"],
+    );
+    const employeeId = employeeRow.rows[0].id as string;
+
+    const hrdEmail = await signUp(hrd, "HRD Kuota");
+    await setRole(hrdEmail, "hrd");
+    const hodEmail = await signUp(hod, "HOD Kuota");
+    await setRole(hodEmail, "hod");
+
+    const quotaBody = {
+      employeeId,
+      year: 2026,
+      balances: [{ leaveTypeId, openingBalance: 18 }],
+    };
+
+    // Karyawan biasa tidak boleh mengubah kuota.
+    const forbidden = await employee.patch("/api/admin/leave-balances", {
+      headers,
+      data: quotaBody,
+    });
+    expect(forbidden.status()).toBe(403);
+
+    // HRD menetapkan kuota; ringkasan admin memuat nilai baru.
+    const updated = await hrd.patch("/api/admin/leave-balances", {
+      headers,
+      data: quotaBody,
+    });
+    expect(updated.status()).toBe(200);
+    const overview = await hrd.get("/api/admin/leave-balances?year=2026", {
+      headers,
+    });
+    expect(overview.status()).toBe(200);
+    const overviewBody = await overview.json();
+    const row = overviewBody.data.employees.find(
+      (item: { id: string }) => item.id === employeeId,
+    );
+    const balance = row.balances.find(
+      (item: { leaveTypeId: string }) => item.leaveTypeId === leaveTypeId,
+    );
+    expect(balance.openingBalance).toBe(18);
+
+    // Karyawan melihat saldonya sendiri.
+    const own = await employee.get("/api/leave-balances?year=2026", {
+      headers,
+    });
+    expect(own.status()).toBe(200);
+    const ownBody = await own.json();
+    const ownBalance = ownBody.data.find(
+      (item: { leaveTypeId: string }) => item.leaveTypeId === leaveTypeId,
+    );
+    expect(ownBalance.openingBalance).toBe(18);
+    expect(ownBalance.remaining).toBe(18);
+
+    // HOD bukan pengelola kuota.
+    const hodForbidden = await hod.patch("/api/admin/leave-balances", {
+      headers,
+      data: { ...quotaBody, balances: [{ leaveTypeId, openingBalance: 20 }] },
+    });
+    expect(hodForbidden.status()).toBe(403);
+
+    // Kuota tidak boleh lebih kecil dari pemakaian yang sudah tercatat.
+    await pool.query(
+      "update leave_balances set used = 5 where employee_id = $1 and leave_type_id = $2 and year = 2026",
+      [employeeId, leaveTypeId],
+    );
+    const belowUsed = await hrd.patch("/api/admin/leave-balances", {
+      headers,
+      data: { ...quotaBody, balances: [{ leaveTypeId, openingBalance: 3 }] },
+    });
+    expect(belowUsed.status()).toBe(422);
+    expect((await belowUsed.json()).error.code).toBe("QUOTA_BELOW_USED");
+  } finally {
+    await pool.end();
+    await hrdContext.close();
+    await employeeContext.close();
+    await hodContext.close();
+  }
 });

@@ -13,6 +13,7 @@ export const updateSettingsSchema = z
       .min(0)
       .max(120)
       .optional(),
+    payday: z.coerce.number().int().min(1).max(28).optional(),
   })
   .strict()
   .refine(

@@ -1,13 +1,19 @@
 import type { Metadata } from "next";
 import { requirePermission } from "@/lib/session";
 import { MasterDataAdmin } from "@/components/master-data-admin";
+import { CsvImport } from "@/components/csv-import";
 
 export const metadata: Metadata = { title: "Hari Libur" };
 
 export default async function AdminHariLiburPage() {
   await requirePermission({ holidays: ["read-any"] });
   return (
-    <MasterDataAdmin
+    <div className="space-y-6">
+      <CsvImport
+        endpoint="/api/holidays/import"
+        columns={["date", "name", "type", "description", "allow_work", "active"]}
+      />
+      <MasterDataAdmin
       title="Hari libur"
       description="Kelola kalender libur. Tandai izin kerja untuk hari libur khusus."
       endpoint="/api/holidays"
@@ -47,5 +53,6 @@ export default async function AdminHariLiburPage() {
         { key: "active", label: "Aktif", type: "boolean", defaultValue: true },
       ]}
     />
+    </div>
   );
 }
