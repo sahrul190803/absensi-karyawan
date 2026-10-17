@@ -1,5 +1,4 @@
-import { readFile } from "node:fs/promises";
-import { ApiError, sessionHasPermission, withApiSession } from "@/lib/api";
+import { sessionHasPermission, withApiSession } from "@/lib/api";
 import { getPhotoForViewer } from "@/services/attendance.service";
 import { idSchema } from "@/validators/common";
 
@@ -13,13 +12,7 @@ export function GET(request: Request, context: Context) {
       attendance: ["read-any"],
     });
     const photo = await getPhotoForViewer(session.user.id, canReadAny, id);
-    let buffer: Buffer;
-    try {
-      buffer = await readFile(photo.absolutePath);
-    } catch {
-      throw new ApiError(404, "NOT_FOUND", "Berkas foto tidak ditemukan.");
-    }
-    return new Response(new Uint8Array(buffer), {
+    return new Response(new Uint8Array(photo.data), {
       headers: {
         "Content-Type": photo.mimeType,
         "Content-Disposition": "inline",

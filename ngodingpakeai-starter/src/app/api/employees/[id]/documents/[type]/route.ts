@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import { z } from "zod";
 import { sessionHasPermission, withApiSession } from "@/lib/api";
 import { getEmployeeDocument } from "@/services/employees.service";
@@ -18,16 +17,15 @@ export function GET(request: Request, context: Context) {
     const canReadAny = await sessionHasPermission(session, {
       employees: ["read-any"],
     });
-    const document = await getEmployeeDocument(
+    const file = await getEmployeeDocument(
       session.user.id,
       canReadAny,
       id,
       type,
     );
-    const file = await readFile(document.absolutePath);
-    return new Response(new Uint8Array(file), {
+    return new Response(new Uint8Array(file.data), {
       headers: {
-        "Content-Type": document.mimeType,
+        "Content-Type": file.mimeType,
         "Cache-Control": "private, no-store",
       },
     });

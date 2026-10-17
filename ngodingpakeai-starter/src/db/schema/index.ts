@@ -15,6 +15,7 @@ export * from "./holiday";
 export * from "./device";
 export * from "./attendance-record";
 export * from "./attendance-photo";
+export * from "./stored-file";
 export * from "./face-profile";
 export * from "./face-verification-log";
 export * from "./request";

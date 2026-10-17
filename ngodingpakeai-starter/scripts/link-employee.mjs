@@ -11,18 +11,21 @@ if (!email) {
   process.exit(1);
 }
 
-if (!existsSync(envPath)) {
-  console.error("Missing .env.local. Run npm run setup first.");
+const env = {};
+if (existsSync(envPath)) {
+  for (const line of readFileSync(envPath, "utf8").split(/\r?\n/)) {
+    const match = line.match(/^([A-Z0-9_]+)="?(.*?)"?$/);
+    if (match) env[match[1]] = match[2];
+  }
+}
+
+const connectionString = process.env.DATABASE_URL || env.DATABASE_URL;
+if (!connectionString) {
+  console.error("Missing DATABASE_URL. Set it in the environment or run npm run setup first.");
   process.exit(1);
 }
 
-const env = {};
-for (const line of readFileSync(envPath, "utf8").split(/\r?\n/)) {
-  const match = line.match(/^([A-Z0-9_]+)="?(.*?)"?$/);
-  if (match) env[match[1]] = match[2];
-}
-
-const client = new pg.Client({ connectionString: env.DATABASE_URL });
+const client = new pg.Client({ connectionString });
 
 try {
   await client.connect();

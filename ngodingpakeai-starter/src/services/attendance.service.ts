@@ -1,6 +1,4 @@
 import "server-only";
-import { mkdir, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
 import {
   and,
   desc,
@@ -26,6 +24,7 @@ import {
   workSchedules,
 } from "@/db/schema";
 import { ApiError } from "@/lib/api";
+import { getStoredFile, putStoredFile } from "@/lib/file-store";
 import { haversineDistanceMeters } from "@/lib/geo";
 import { ADMIN_ROLES, LOCATION_FREE_ROLES } from "@/lib/permissions";
 import { notifyUserInBackground } from "@/services/notifications.service";
@@ -244,10 +243,13 @@ const storePhoto = async (dataUrl: string, name: string) => {
   if (buffer.byteLength > MAX_PHOTO_BYTES)
     throw new ApiError(422, "PHOTO_TOO_LARGE", "Ukuran foto melebihi 3 MB.");
   const extension = mimeType === "image/png" ? "png" : "jpg";
-  const directory = resolve(process.cwd(), "storage", "attendance-photos");
-  await mkdir(directory, { recursive: true });
   const storageKey = `${name}.${extension}`;
-  await writeFile(resolve(directory, storageKey), buffer);
+  await putStoredFile({
+    category: "attendance-photos",
+    storageKey,
+    mimeType,
+    data: buffer,
+  });
   return { storageKey, mimeType, fileSize: buffer.byteLength };
 };
 
@@ -873,13 +875,9 @@ export async function getPhotoForViewer(
       throw new ApiError(404, "NOT_FOUND", "Foto tidak ditemukan.");
   }
 
-  return {
-    absolutePath: resolve(
-      process.cwd(),
-      "storage",
-      "attendance-photos",
-      row.storageKey,
-    ),
-    mimeType: row.mimeType,
-  };
+  const file = await getStoredFile("attendance-photos", row.storageKey);
+  if (!file)
+    throw new ApiError(404, "NOT_FOUND", "Berkas foto tidak ditemukan.");
+
+  return { data: file.data, mimeType: row.mimeType };
 }

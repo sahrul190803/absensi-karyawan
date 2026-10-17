@@ -811,8 +811,8 @@ export function ScheduleGrid({ embedded = false }: { embedded?: boolean }) {
               role="alert"
               className="mt-4 rounded-lg border border-danger/40 bg-card px-4 py-3 text-sm text-danger"
             >
-              Rentang maksimal 92 hari sekali simpan. Bagi menjadi beberapa
-              kali simpan.
+              Rentang maksimal 92 hari sekali simpan. Bagi menjadi beberapa kali
+              simpan.
             </p>
           )}
 

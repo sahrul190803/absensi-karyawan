@@ -22,6 +22,7 @@
     "role:set": "node scripts/set-role.mjs",
     "db:studio": "drizzle-kit studio",
     "seed": "node scripts/seed.mjs",
+    "demo:accounts": "node scripts/demo-accounts.mjs",
     "employee:link": "node scripts/link-employee.mjs",
     "doctor": "node scripts/doctor.mjs",
     "test": "node scripts/test.mjs unit",

@@ -1,6 +1,4 @@
 import "server-only";
-import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
@@ -11,6 +9,7 @@ import {
   faceVerificationLogs,
 } from "@/db/schema";
 import { ApiError } from "@/lib/api";
+import { deleteStoredFile, getStoredFile, putStoredFile } from "@/lib/file-store";
 import {
   FACE_LIVENESS_MIN,
   faceProviderName,
@@ -80,11 +79,9 @@ const parseDataUrl = (value: string) => {
   return { buffer, mimeType: match[1] };
 };
 
-const faceDirectory = () => resolve(process.cwd(), "storage", "face-profiles");
-
 const removeFacePhoto = async (storageKey: string) => {
   try {
-    await unlink(resolve(faceDirectory(), storageKey));
+    await deleteStoredFile("face-profiles", storageKey);
   } catch {
     // File sudah tidak ada; tidak menghalangi pencabutan consent.
   }
@@ -151,8 +148,12 @@ export async function enrollFace(userId: string, input: FaceEnrollInput) {
   const { buffer, mimeType } = parseDataUrl(input.photo);
   const extension = mimeType === "image/png" ? "png" : "jpg";
   const storageKey = `${employee.id}.${extension}`;
-  await mkdir(faceDirectory(), { recursive: true });
-  await writeFile(resolve(faceDirectory(), storageKey), buffer);
+  await putStoredFile({
+    category: "face-profiles",
+    storageKey,
+    mimeType,
+    data: buffer,
+  });
 
   const previous = await getProfile(employee.id);
   await db
@@ -231,16 +232,14 @@ export async function verifyAttendanceFace(input: {
     );
 
   const { buffer: probe, mimeType: probeMimeType } = parseDataUrl(input.probePhoto);
-  let reference: Buffer;
-  try {
-    reference = await readFile(resolve(faceDirectory(), profile.storageKey));
-  } catch {
+  const referenceFile = await getStoredFile("face-profiles", profile.storageKey);
+  if (!referenceFile)
     throw new ApiError(
       503,
       "FACE_UNAVAILABLE",
       "Foto referensi wajah tidak ditemukan. Daftarkan ulang wajah Anda.",
     );
-  }
+  const reference = referenceFile.data;
 
   let result;
   try {

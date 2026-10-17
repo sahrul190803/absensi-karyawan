@@ -5,23 +5,23 @@ import pg from "pg";
 const root = resolve(import.meta.dirname, "..");
 const envPath = resolve(root, ".env.local");
 
-if (!existsSync(envPath)) {
-  console.error("Missing .env.local. Run npm run setup first.");
-  process.exit(1);
-}
-
 const env = {};
-for (const line of readFileSync(envPath, "utf8").split(/\r?\n/)) {
-  const match = line.match(/^([A-Z0-9_]+)="?(.*?)"?$/);
-  if (match) env[match[1]] = match[2];
+if (existsSync(envPath)) {
+  for (const line of readFileSync(envPath, "utf8").split(/\r?\n/)) {
+    const match = line.match(/^([A-Z0-9_]+)="?(.*?)"?$/);
+    if (match) env[match[1]] = match[2];
+  }
 }
 
-if (!env.DATABASE_URL) {
-  console.error("DATABASE_URL is missing from .env.local.");
+// Env override allows seeding a hosted database, e.g.
+// $env:DATABASE_URL="postgresql://..."; npm run seed
+const connectionString = process.env.DATABASE_URL || env.DATABASE_URL;
+if (!connectionString) {
+  console.error("Missing DATABASE_URL. Set it in the environment or run npm run setup first.");
   process.exit(1);
 }
 
-const client = new pg.Client({ connectionString: env.DATABASE_URL });
+const client = new pg.Client({ connectionString });
 
 const upsertDepartment = async (code, name) => {
   const { rows } = await client.query(

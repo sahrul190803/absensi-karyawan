@@ -1,10 +1,9 @@
 import "server-only";
-import { mkdir, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
 import { and, desc, eq, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { auditLogs, requests, user } from "@/db/schema";
 import { ApiError } from "@/lib/api";
+import { getStoredFile, putStoredFile } from "@/lib/file-store";
 import { cancelAlphaForRange } from "@/services/alpha.service";
 import { deductLeaveForApprovedRequest } from "@/services/leave.service";
 import { notifyUserInBackground } from "@/services/notifications.service";
@@ -67,10 +66,13 @@ const storeAttachment = async (dataUrl: string, name: string) => {
         : mimeType === "image/webp"
           ? "webp"
           : "jpg";
-  const directory = resolve(process.cwd(), "storage", "request-attachments");
-  await mkdir(directory, { recursive: true });
   const storageKey = `${name}.${extension}`;
-  await writeFile(resolve(directory, storageKey), buffer);
+  await putStoredFile({
+    category: "request-attachments",
+    storageKey,
+    mimeType,
+    data: buffer,
+  });
   return { storageKey, mimeType, fileSize: buffer.byteLength };
 };
 
@@ -306,14 +308,13 @@ export async function getRequestAttachment(
   if (!canReadAny && row.userId !== userId)
     throw new ApiError(404, "NOT_FOUND", "Lampiran tidak ditemukan.");
 
+  const file = await getStoredFile("request-attachments", row.attachmentUrl);
+  if (!file)
+    throw new ApiError(404, "NOT_FOUND", "Berkas lampiran tidak ditemukan.");
+
   const extension = row.attachmentUrl.split(".").pop()?.toLowerCase() ?? "";
   return {
-    absolutePath: resolve(
-      process.cwd(),
-      "storage",
-      "request-attachments",
-      row.attachmentUrl,
-    ),
-    mimeType: ATTACHMENT_MIME[extension] ?? "application/octet-stream",
+    data: file.data,
+    mimeType: file.mimeType || ATTACHMENT_MIME[extension] || "application/octet-stream",
   };
 }

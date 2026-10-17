@@ -1,5 +1,4 @@
-import { readFile } from "node:fs/promises";
-import { ApiError, sessionHasPermission, withApiSession } from "@/lib/api";
+import { sessionHasPermission, withApiSession } from "@/lib/api";
 import { getRequestAttachment } from "@/services/requests.service";
 import { requestIdSchema } from "@/validators/requests";
 
@@ -13,13 +12,7 @@ export function GET(request: Request, context: Context) {
       requests: ["read-any"],
     });
     const file = await getRequestAttachment(session.user.id, canReadAny, id);
-    let buffer: Buffer;
-    try {
-      buffer = await readFile(file.absolutePath);
-    } catch {
-      throw new ApiError(404, "NOT_FOUND", "Berkas lampiran tidak ditemukan.");
-    }
-    return new Response(new Uint8Array(buffer), {
+    return new Response(new Uint8Array(file.data), {
       headers: {
         "Content-Type": file.mimeType,
         "Content-Disposition": "inline",

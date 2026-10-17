@@ -1,6 +1,4 @@
 import "server-only";
-import { mkdir, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
@@ -11,6 +9,7 @@ import {
   workLocations,
 } from "@/db/schema";
 import { ApiError } from "@/lib/api";
+import { getStoredFile, putStoredFile } from "@/lib/file-store";
 import type { ListQueryInput } from "@/validators/common";
 import type {
   CreateEmployeeInput,
@@ -134,10 +133,13 @@ const storeDocument = async (dataUrl: string, name: string) => {
     throw new ApiError(422, "DOCUMENT_TOO_LARGE", "Ukuran dokumen melebihi 3 MB.");
   const extension =
     mimeType === "image/png" ? "png" : mimeType === "image/webp" ? "webp" : "jpg";
-  const directory = resolve(process.cwd(), "storage", "employee-documents");
-  await mkdir(directory, { recursive: true });
   const storageKey = `${name}.${extension}`;
-  await writeFile(resolve(directory, storageKey), buffer);
+  await putStoredFile({
+    category: "employee-documents",
+    storageKey,
+    mimeType,
+    data: buffer,
+  });
   return { storageKey, mimeType, fileSize: buffer.byteLength };
 };
 
@@ -225,21 +227,9 @@ export async function getEmployeeDocument(
         : "Foto profil belum diunggah.",
     );
 
-  const extension = storageKey.split(".").pop()?.toLowerCase() ?? "";
-  const mimeType =
-    extension === "png"
-      ? "image/png"
-      : extension === "webp"
-        ? "image/webp"
-        : "image/jpeg";
+  const file = await getStoredFile("employee-documents", storageKey);
+  if (!file)
+    throw new ApiError(404, "NOT_FOUND", "Berkas dokumen tidak ditemukan.");
 
-  return {
-    absolutePath: resolve(
-      process.cwd(),
-      "storage",
-      "employee-documents",
-      storageKey,
-    ),
-    mimeType,
-  };
+  return { data: file.data, mimeType: file.mimeType };
 }
