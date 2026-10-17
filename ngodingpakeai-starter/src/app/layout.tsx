@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist_Mono, Plus_Jakarta_Sans } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import { siteConfig } from "@/config/site";
 import { Providers } from "@/components/providers";
 import "./globals.css";
@@ -54,6 +55,7 @@ export default function RootLayout({
           </a>
           {children}
         </Providers>
+        <Analytics />
       </body>
     </html>
   );
