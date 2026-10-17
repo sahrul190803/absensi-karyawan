@@ -13,7 +13,8 @@ try {
       process.env.MIGRATION_DATABASE_URL || process.env.DATABASE_URL,
     ),
     max: 1,
-    connectionTimeoutMillis: 5000,
+    // Neon compute may need to wake from scale-to-zero before answering.
+    connectionTimeoutMillis: 15000,
   });
   pool.on("error", () =>
     console.error("The PostgreSQL migration connection was interrupted."),

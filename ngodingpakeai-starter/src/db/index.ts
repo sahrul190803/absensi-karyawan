@@ -1,6 +1,7 @@
 import "server-only";
 import { Pool } from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
+import { attachDatabasePool } from "@vercel/functions";
 import { env } from "@/lib/env";
 import * as schema from "./schema";
 
@@ -11,6 +12,10 @@ function connect() {
     connectionTimeoutMillis: 5000,
     idleTimeoutMillis: 30000,
   });
+  // On Vercel Fluid compute this keeps the instance alive long enough to
+  // retire idle connections; elsewhere (local dev, builds, tests) it only
+  // attaches a listener and does nothing.
+  attachDatabasePool(pool);
   pool.on("error", () => {
     console.error(
       "An idle PostgreSQL connection was lost. Check database availability.",
