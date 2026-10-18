@@ -79,7 +79,7 @@ export const roles = {
     appreciations: [],
   }),
   hod: ac.newRole({
-    employees: ["read-any"],
+    employees: ["read-any", "update"],
     departments: ["read-any"],
     positions: ["read-any"],
     workLocations: ["read-any"],

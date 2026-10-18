@@ -36,6 +36,8 @@ type RequestRow = {
   employeeEmail: string | null;
 };
 
+type Position = { id: string; name: string };
+
 const TYPE_TABS = [
   { value: "", label: "Semua" },
   { value: "leave", label: "Cuti" },
@@ -86,12 +88,15 @@ export function IzinCutiView({
   allowedTypes?: string[];
 }) {
   const typeTabs = useMemo(
-    () => TYPE_TABS.filter((tab) => !tab.value || allowedTypes.includes(tab.value)),
+    () =>
+      TYPE_TABS.filter((tab) => !tab.value || allowedTypes.includes(tab.value)),
     [allowedTypes],
   );
   const [items, setItems] = useState<RequestRow[]>([]);
   const [type, setType] = useState("");
   const [status, setStatus] = useState(readOnly ? "" : "pending");
+  const [positionId, setPositionId] = useState("");
+  const [positions, setPositions] = useState<Position[]>([]);
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<RequestRow | null>(null);
   const [decisionNote, setDecisionNote] = useState("");
@@ -100,36 +105,55 @@ export function IzinCutiView({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const load = useCallback(async (nextStatus: string, nextType: string) => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({ limit: "100" });
-      if (nextStatus) params.set("status", nextStatus);
-      if (nextType) params.set("type", nextType);
-      const response = await fetch(`/api/admin/requests?${params}`, {
-        cache: "no-store",
-      });
-      const body = await response.json();
-      if (!response.ok) {
-        setError(body?.error?.message ?? "Gagal memuat pengajuan.");
-        return;
+  const load = useCallback(
+    async (nextStatus: string, nextType: string, nextPosition: string) => {
+      setLoading(true);
+      try {
+        const params = new URLSearchParams({ limit: "100" });
+        if (nextStatus) params.set("status", nextStatus);
+        if (nextType) params.set("type", nextType);
+        if (nextPosition) params.set("positionId", nextPosition);
+        const response = await fetch(`/api/admin/requests?${params}`, {
+          cache: "no-store",
+        });
+        const body = await response.json();
+        if (!response.ok) {
+          setError(body?.error?.message ?? "Gagal memuat pengajuan.");
+          return;
+        }
+        setItems(body.data);
+        setError(null);
+      } catch {
+        setError("Tidak dapat menghubungi server.");
+      } finally {
+        setLoading(false);
       }
-      setItems(body.data);
-      setError(null);
-    } catch {
-      setError("Tidak dapat menghubungi server.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    },
+    [],
+  );
 
   useEffect(() => {
     const timer = window.setTimeout(
-      () => void load(readOnly ? "" : "pending", ""),
+      () => void load(readOnly ? "" : "pending", "", ""),
       0,
     );
     return () => window.clearTimeout(timer);
   }, [load, readOnly]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(async () => {
+      try {
+        const response = await fetch("/api/positions?limit=200", {
+          cache: "no-store",
+        });
+        const body = await response.json();
+        if (response.ok) setPositions(body.data ?? []);
+      } catch {
+        // Filter opsional; daftar pengajuan tetap tampil tanpa daftar jabatan.
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   const decide = useCallback(
     async (id: string, decision: "approved" | "rejected") => {
@@ -156,14 +180,14 @@ export function IzinCutiView({
         );
         setSelected(null);
         setDecisionNote("");
-        await load(status, type);
+        await load(status, type, positionId);
       } catch {
         setError("Tidak dapat menghubungi server.");
       } finally {
         setBusy(false);
       }
     },
-    [decisionNote, load, status, type],
+    [decisionNote, load, positionId, status, type],
   );
 
   const filtered = useMemo(() => {
@@ -183,7 +207,7 @@ export function IzinCutiView({
           variant="outline"
           size="sm"
           disabled={loading}
-          onClick={() => void load(status, type)}
+          onClick={() => void load(status, type, positionId)}
         >
           <RefreshCw aria-hidden="true" />
           Muat ulang
@@ -205,7 +229,7 @@ export function IzinCutiView({
               aria-selected={active}
               onClick={() => {
                 setType(tab.value);
-                void load(status, tab.value);
+                void load(status, tab.value, positionId);
               }}
               className={`rounded-md border px-3 py-1.5 text-sm font-medium transition-colors ${
                 active
@@ -241,12 +265,30 @@ export function IzinCutiView({
             value={status}
             onChange={(event) => {
               setStatus(event.target.value);
-              void load(event.target.value, type);
+              void load(event.target.value, type, positionId);
             }}
           >
             {STATUS_OPTIONS.map((option) => (
               <option key={option.value || "all"} value={option.value}>
                 {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex items-center gap-2 text-sm text-muted-foreground">
+          Jabatan
+          <select
+            className="h-9 rounded-md border border-border bg-card px-2 text-sm text-foreground"
+            value={positionId}
+            onChange={(event) => {
+              setPositionId(event.target.value);
+              void load(status, type, event.target.value);
+            }}
+          >
+            <option value="">Semua jabatan</option>
+            {positions.map((position) => (
+              <option key={position.id} value={position.id}>
+                {position.name}
               </option>
             ))}
           </select>
@@ -257,7 +299,10 @@ export function IzinCutiView({
       </div>
 
       {notice && (
-        <p role="status" className="rounded-lg border bg-card px-4 py-3 text-sm">
+        <p
+          role="status"
+          className="rounded-lg border bg-card px-4 py-3 text-sm"
+        >
           {notice}
         </p>
       )}

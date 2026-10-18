@@ -10,6 +10,7 @@ import {
 } from "@/db/schema";
 import { ApiError } from "@/lib/api";
 import { getStoredFile, putStoredFile } from "@/lib/file-store";
+import { notifyUserInBackground } from "@/services/notifications.service";
 import type { ListQueryInput } from "@/validators/common";
 import type {
   CreateEmployeeInput,
@@ -32,18 +33,26 @@ const fields = {
   employmentStatus: employees.employmentStatus,
   bankName: employees.bankName,
   bankAccount: employees.bankAccount,
+  bankAccountName: employees.bankAccountName,
   ktpNumber: employees.ktpNumber,
   ktpPhotoUrl: employees.ktpPhotoUrl,
   salaryType: employees.salaryType,
   baseSalary: employees.baseSalary,
+  allowance: employees.allowance,
   createdAt: employees.createdAt,
   updatedAt: employees.updatedAt,
 };
 
 export async function listAnyEmployees({ limit, offset }: ListQueryInput) {
   const rows = await db
-    .select(fields)
+    .select({
+      ...fields,
+      departmentName: departments.name,
+      positionName: positions.name,
+    })
     .from(employees)
+    .leftJoin(departments, eq(departments.id, employees.departmentId))
+    .leftJoin(positions, eq(positions.id, employees.positionId))
     .orderBy(asc(employees.fullName))
     .limit(limit + 1)
     .offset(offset);
@@ -71,11 +80,32 @@ export async function updateAnyEmployee(
   id: string,
   input: UpdateEmployeeInput,
 ) {
+  const [existing] = await db
+    .select({
+      userId: employees.userId,
+      fullName: employees.fullName,
+      employmentStatus: employees.employmentStatus,
+    })
+    .from(employees)
+    .where(eq(employees.id, id))
+    .limit(1);
   const [row] = await db
     .update(employees)
     .set(input)
     .where(eq(employees.id, id))
     .returning(fields);
+  if (
+    existing &&
+    existing.employmentStatus !== "active" &&
+    row?.employmentStatus === "active"
+  ) {
+    notifyUserInBackground(existing.userId, {
+      event: "employee-approved",
+      type: "employee",
+      title: "Akun karyawan disetujui",
+      body: "Akun Anda sudah diverifikasi HRD/HOD dan bisa dipakai untuk absensi, jadwal, pengajuan, serta klaim makan.",
+    });
+  }
   return row;
 }
 
@@ -118,9 +148,7 @@ export async function getOwnProfile(userId: string) {
 const MAX_DOCUMENT_BYTES = 3 * 1024 * 1024;
 
 const storeDocument = async (dataUrl: string, name: string) => {
-  const match = dataUrl.match(
-    /^data:(image\/(?:jpeg|png|webp));base64,(.+)$/,
-  );
+  const match = dataUrl.match(/^data:(image\/(?:jpeg|png|webp));base64,(.+)$/);
   if (!match)
     throw new ApiError(
       422,
@@ -130,9 +158,17 @@ const storeDocument = async (dataUrl: string, name: string) => {
   const mimeType = match[1];
   const buffer = Buffer.from(match[2], "base64");
   if (buffer.byteLength > MAX_DOCUMENT_BYTES)
-    throw new ApiError(422, "DOCUMENT_TOO_LARGE", "Ukuran dokumen melebihi 3 MB.");
+    throw new ApiError(
+      422,
+      "DOCUMENT_TOO_LARGE",
+      "Ukuran dokumen melebihi 3 MB.",
+    );
   const extension =
-    mimeType === "image/png" ? "png" : mimeType === "image/webp" ? "webp" : "jpg";
+    mimeType === "image/png"
+      ? "png"
+      : mimeType === "image/webp"
+        ? "webp"
+        : "jpg";
   const storageKey = `${name}.${extension}`;
   await putStoredFile({
     category: "employee-documents",
@@ -176,10 +212,7 @@ export async function updateOwnProfile(
     updates.ktpPhotoUrl = stored.storageKey;
   }
 
-  await db
-    .update(employees)
-    .set(updates)
-    .where(eq(employees.id, employee.id));
+  await db.update(employees).set(updates).where(eq(employees.id, employee.id));
 
   await db.insert(auditLogs).values({
     userId,

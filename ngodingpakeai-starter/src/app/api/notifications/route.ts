@@ -1,5 +1,6 @@
 import { withApiSession } from "@/lib/api";
 import {
+  clearOwnNotifications,
   listOwnNotifications,
   markAllOwnRead,
 } from "@/services/notifications.service";
@@ -19,5 +20,11 @@ export function GET(request: Request) {
 export function PATCH(request: Request) {
   return withApiSession(request, async (session) =>
     Response.json({ data: await markAllOwnRead(session.user.id) }),
+  );
+}
+
+export function DELETE(request: Request) {
+  return withApiSession(request, async (session) =>
+    Response.json({ data: await clearOwnNotifications(session.user.id) }),
   );
 }

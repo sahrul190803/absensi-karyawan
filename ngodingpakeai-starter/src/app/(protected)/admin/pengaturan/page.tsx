@@ -5,6 +5,11 @@ import { SettingsView } from "./settings-view";
 export const metadata: Metadata = { title: "Pengaturan" };
 
 export default async function AdminPengaturanPage() {
-  await requirePermission({ settings: ["read-any"] });
-  return <SettingsView />;
+  const session = await requirePermission({ settings: ["read-any"] });
+  return (
+    <SettingsView
+      userEmail={session.user.email}
+      userRole={session.user.role ?? "hrd"}
+    />
+  );
 }

@@ -1,0 +1,17 @@
+.env*
+!.env.example
+node_modules
+.next
+out
+dist
+storage
+test-results
+playwright-report
+coverage
+.neon
+.agents
+.codex
+.cursor
+.vscode
+*.log
+*.pid

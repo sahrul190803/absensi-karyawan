@@ -29,19 +29,43 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
         email: String(data.get("email")).trim(),
         password: String(data.get("password")),
       };
-      const result = signingUp
-        ? await authClient.signUp.email({
-            ...credentials,
-            name: String(data.get("name")).trim(),
-          })
-        : await authClient.signIn.email(credentials);
+      if (signingUp) {
+        const fullName = String(data.get("name")).trim();
+        const result = await authClient.signUp.email({
+          ...credentials,
+          name: fullName,
+        });
+        if (result.error) {
+          setError(
+            result.error.message ||
+              "Akun tidak dapat dibuat. Coba lagi sebentar lagi.",
+          );
+          return;
+        }
+        const onboarding = await fetch("/api/onboarding", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fullName,
+            nik: String(data.get("nik")).trim(),
+            phone: String(data.get("phone")).trim(),
+            address: String(data.get("address")).trim(),
+          }),
+        });
+        if (!onboarding.ok) {
+          const body = await onboarding.json().catch(() => null);
+          const code = body?.error?.code ?? "ONBOARDING_FAILED";
+          router.replace(`/pending?error=${encodeURIComponent(code)}`);
+          router.refresh();
+          return;
+        }
+        router.replace("/pending");
+        router.refresh();
+        return;
+      }
+      const result = await authClient.signIn.email(credentials);
       if (result.error) {
-        setError(
-          signingUp
-            ? result.error.message ||
-                "Akun tidak dapat dibuat. Coba lagi sebentar lagi."
-            : "Email atau kata sandi salah. Periksa kembali lalu coba lagi.",
-        );
+        setError("Email atau kata sandi salah. Periksa kembali lalu coba lagi.");
         return;
       }
       router.replace(siteConfig.homePath);
@@ -63,7 +87,7 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
       </h1>
       <p className="mt-3 text-sm leading-6 text-muted-foreground">
         {signingUp
-          ? "Gunakan nama lengkap dan email aktif. HRD akan menghubungkan akun ini dengan data karyawan Anda."
+          ? "Isi data pribadi Anda. Data otomatis masuk ke daftar karyawan dan menunggu verifikasi HRD/HOD sebelum akun bisa dipakai."
           : "Absen dengan foto selfie, lihat jadwal shift, ajukan izin, dan klaim jatah makan."}
       </p>
       <form
@@ -89,6 +113,45 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
                 maxLength={100}
                 pattern=".*\S.*"
               />
+            </div>
+          )}
+          {signingUp && (
+            <div className="space-y-2">
+              <Label htmlFor="nik">NIK</Label>
+              <Input
+                id="nik"
+                name="nik"
+                placeholder="Nomor induk karyawan"
+                required
+                minLength={1}
+                maxLength={32}
+              />
+            </div>
+          )}
+          {signingUp && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="phone">No. telepon</Label>
+                <Input
+                  id="phone"
+                  name="phone"
+                  type="tel"
+                  autoComplete="tel"
+                  placeholder="08xxxxxxxxxx"
+                  required
+                  maxLength={32}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="address">Alamat</Label>
+                <Input
+                  id="address"
+                  name="address"
+                  autoComplete="street-address"
+                  placeholder="Kota / alamat domisili"
+                  maxLength={500}
+                />
+              </div>
             </div>
           )}
           <div className="space-y-2">

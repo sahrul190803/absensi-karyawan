@@ -1,12 +1,12 @@
 import "server-only";
 import { and, desc, eq, type SQL } from "drizzle-orm";
 import { db } from "@/db";
-import { auditLogs, requests, user } from "@/db/schema";
+import { auditLogs, employees, requests, user } from "@/db/schema";
 import { ApiError } from "@/lib/api";
 import { getStoredFile, putStoredFile } from "@/lib/file-store";
 import { cancelAlphaForRange } from "@/services/alpha.service";
 import { deductLeaveForApprovedRequest } from "@/services/leave.service";
-import { notifyUserInBackground } from "@/services/notifications.service";
+import { notifyManagersInApp, notifyUserInBackground } from "@/services/notifications.service";
 import type {
   CreateRequestInput,
   DecisionInput,
@@ -138,6 +138,11 @@ export async function createOwnRequest(
       attachment: Boolean(attachmentUrl),
     },
   });
+  await notifyManagersInApp({
+    type: "request",
+    title: "Pengajuan baru menunggu persetujuan",
+    body: `Ada pengajuan ${input.type} tanggal ${input.startDate} yang perlu ditinjau di menu Attendant.`,
+  }).catch(() => undefined);
   return row;
 }
 
@@ -172,6 +177,8 @@ export async function listAnyRequests(query: RequestListInput) {
   const conditions: SQL[] = [];
   if (query.status) conditions.push(eq(requests.status, query.status));
   if (query.type) conditions.push(eq(requests.type, query.type));
+  if (query.positionId)
+    conditions.push(eq(employees.positionId, query.positionId));
 
   const rows = await db
     .select({
@@ -181,6 +188,7 @@ export async function listAnyRequests(query: RequestListInput) {
     })
     .from(requests)
     .innerJoin(user, eq(user.id, requests.userId))
+    .leftJoin(employees, eq(employees.userId, requests.userId))
     .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(desc(requests.createdAt))
     .limit(query.limit + 1)

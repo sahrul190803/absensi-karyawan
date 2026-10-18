@@ -1,5 +1,5 @@
 import "server-only";
-import { asc, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { workLocations } from "@/db/schema";
 import type { ListQueryInput } from "@/validators/common";
@@ -25,7 +25,7 @@ export async function listAnyWorkLocations({ limit, offset }: ListQueryInput) {
   const rows = await db
     .select(fields)
     .from(workLocations)
-    .orderBy(asc(workLocations.name))
+    .orderBy(desc(workLocations.active), desc(workLocations.updatedAt))
     .limit(limit + 1)
     .offset(offset);
   return {
@@ -35,10 +35,7 @@ export async function listAnyWorkLocations({ limit, offset }: ListQueryInput) {
 }
 
 export async function createAnyWorkLocation(input: CreateWorkLocationInput) {
-  const [row] = await db
-    .insert(workLocations)
-    .values(input)
-    .returning(fields);
+  const [row] = await db.insert(workLocations).values(input).returning(fields);
   return row;
 }
 

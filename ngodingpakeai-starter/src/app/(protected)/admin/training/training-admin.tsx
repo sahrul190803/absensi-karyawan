@@ -67,6 +67,7 @@ export function TrainingAdmin() {
   const [values, setValues] = useState<FormValues>(EMPTY_FORM);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
+  const [pickerPosition, setPickerPosition] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -135,6 +136,10 @@ export function TrainingAdmin() {
     const query = search.trim().toLowerCase();
     return employees
       .filter((employee) => employee.employmentStatus === "active")
+      .filter(
+        (employee) =>
+          !pickerPosition || employee.positionId === pickerPosition,
+      )
       .map((employee) => ({
         ...employee,
         departmentName: employee.departmentId
@@ -161,7 +166,7 @@ export function TrainingAdmin() {
         if (a.trained !== b.trained) return a.trained ? 1 : -1;
         return a.fullName.localeCompare(b.fullName, "id-ID");
       });
-  }, [departmentNames, employees, positionNames, search, trainedIds]);
+  }, [departmentNames, employees, pickerPosition, positionNames, search, trainedIds]);
 
   const visibleTrainings = useMemo(
     () =>
@@ -392,10 +397,23 @@ export function TrainingAdmin() {
               type="search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Cari nama, NIK, departemen, atau jabatan…"
+              placeholder="Cari nama, NIK, departemen, atau jabatan..."
               aria-label="Cari karyawan peserta"
               className="mt-3 h-9 w-full rounded-md border border-border bg-card px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
             />
+            <select
+              className="mt-2 h-9 w-full rounded-md border border-border bg-card px-2 text-sm text-foreground"
+              value={pickerPosition}
+              onChange={(event) => setPickerPosition(event.target.value)}
+              aria-label="Filter jabatan peserta"
+            >
+              <option value="">Semua jabatan</option>
+              {positions.map((position) => (
+                <option key={position.id} value={position.id}>
+                  {position.name}
+                </option>
+              ))}
+            </select>
             <ul className="mt-2 max-h-64 overflow-y-auto rounded-md border border-border">
               {pickerRows.length === 0 ? (
                 <li className="px-3 py-6 text-center text-sm text-muted-foreground">

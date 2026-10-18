@@ -162,7 +162,9 @@ export function toPdf({ title, headers, rows }: PdfSpec): Buffer {
     );
   });
   pages.forEach((page) => {
-    addObject(`<< /Length ${page.length} >>\nstream\n`);
+    objectOffsets.push(offset);
+    objectCount += 1;
+    push(`${objectCount} 0 obj\n<< /Length ${page.length} >>\nstream\n`);
     push(page);
     push("\nendstream\nendobj\n");
   });

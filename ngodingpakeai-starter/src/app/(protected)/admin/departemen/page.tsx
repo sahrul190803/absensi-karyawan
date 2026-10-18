@@ -13,17 +13,18 @@ export default async function AdminDepartemenPage() {
       endpoint="/api/departments"
       columns={[
         { key: "code", label: "Kode", format: "mono" },
-        { key: "name", label: "Nama" },
+        { key: "name", label: "Departemen" },
         { key: "managerUserId", label: "Kepala divisi (HOD)" },
         { key: "active", label: "Aktif", format: "boolean" },
       ]}
       fields={[
         { key: "code", label: "Kode", type: "text", required: true },
-        { key: "name", label: "Nama", type: "text", required: true },
+        { key: "name", label: "Departemen", type: "text", required: true },
         {
           key: "managerUserId",
           label: "Kepala divisi (HOD)",
           type: "select",
+          searchable: true,
           optionsFrom: {
             endpoint: "/api/employees",
             labelKey: "fullName",

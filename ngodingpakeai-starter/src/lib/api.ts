@@ -1,5 +1,8 @@
 import "server-only";
+import { eq } from "drizzle-orm";
 import { ZodError } from "zod";
+import { db } from "@/db";
+import { employees } from "@/db/schema";
 import { auth } from "@/lib/auth";
 import { env } from "@/lib/env";
 import type { Permissions } from "@/lib/permissions";
@@ -20,6 +23,7 @@ type Session = NonNullable<Awaited<ReturnType<typeof auth.api.getSession>>>;
 export async function withApiSession(
   request: Request,
   handler: (session: Session) => Promise<Response>,
+  options: { allowPending?: boolean } = {},
 ) {
   let response: Response;
   try {
@@ -42,6 +46,33 @@ export async function withApiSession(
           "Send this request from the app's configured origin.",
         );
     }
+
+    if (!options.allowPending) {
+      const [employee] = await db
+        .select({ status: employees.employmentStatus })
+        .from(employees)
+        .where(eq(employees.userId, session.user.id))
+        .limit(1);
+      const roles = (session.user.role ?? "user")
+        .split(",")
+        .map((role) => role.trim());
+      const manager = roles.some((role) =>
+        ["hrd", "admin", "hod"].includes(role),
+      );
+      if (employee && employee.status !== "active")
+        throw new ApiError(
+          403,
+          "ACCOUNT_PENDING",
+          "Akun Anda belum diverifikasi HRD.",
+        );
+      if (!employee && !manager)
+        throw new ApiError(
+          403,
+          "ACCOUNT_NOT_LINKED",
+          "Lengkapi data pribadi terlebih dahulu.",
+        );
+    }
+
     response = await handler(session);
   } catch (error) {
     if (error instanceof ApiError) {

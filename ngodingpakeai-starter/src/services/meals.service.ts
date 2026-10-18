@@ -1,12 +1,28 @@
 import "server-only";
-import { and, desc, eq, gte, lte, type SQL } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gte,
+  isNotNull,
+  isNull,
+  lte,
+  ne,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 import { db } from "@/db";
 import {
+  attendanceRecords,
   auditLogs,
   companies,
   departments,
   employees,
   mealClaims,
+  shifts,
+  workSchedules,
 } from "@/db/schema";
 import { ApiError } from "@/lib/api";
 import type { MealClaimInput, MealQueryInput } from "@/validators/meals";
@@ -108,12 +124,121 @@ export async function claimOwnMeal(userId: string, input: MealClaimInput) {
   return row;
 }
 
-export async function listAnyMealClaims(query: MealQueryInput) {
+type Totals = { total: number; pagi: number; siang: number; malam: number };
+
+const emptyTotals = (): Totals => ({
+  total: 0,
+  pagi: 0,
+  siang: 0,
+  malam: 0,
+});
+
+const claimConditions = (query: MealQueryInput) => {
   const conditions: SQL[] = [];
   if (query.from) conditions.push(gte(mealClaims.date, query.from));
   if (query.to) conditions.push(lte(mealClaims.date, query.to));
   if (query.departmentId)
     conditions.push(eq(employees.departmentId, query.departmentId));
+  if (query.positionId)
+    conditions.push(eq(employees.positionId, query.positionId));
+  return conditions;
+};
+
+const claimTotals = async (conditions: SQL[]): Promise<Totals> => {
+  const [row] = await db
+    .select({
+      total: count(),
+      pagi: sql<number>`count(*) filter (where ${mealClaims.session} = 'pagi')`.mapWith(
+        Number,
+      ),
+      siang: sql<number>`count(*) filter (where ${mealClaims.session} = 'siang')`.mapWith(
+        Number,
+      ),
+      malam: sql<number>`count(*) filter (where ${mealClaims.session} = 'malam')`.mapWith(
+        Number,
+      ),
+    })
+    .from(mealClaims)
+    .innerJoin(employees, eq(employees.id, mealClaims.employeeId))
+    .where(conditions.length > 0 ? and(...conditions) : undefined);
+  return row ?? emptyTotals();
+};
+
+const scheduleSession = sql<string>`
+  case
+    when lower(${shifts.name}) like '%malam%' then 'malam'
+    when lower(${shifts.name}) like '%siang%' then 'siang'
+    when lower(${shifts.name}) like '%pagi%' then 'pagi'
+    when ${shifts.crossesMidnight} then 'malam'
+    when extract(hour from ${shifts.startTime}) >= 17 then 'malam'
+    when extract(hour from ${shifts.startTime}) >= 11 then 'siang'
+    when extract(hour from (${attendanceRecords.checkInTime} at time zone 'Asia/Jakarta')) >= 17 then 'malam'
+    when extract(hour from (${attendanceRecords.checkInTime} at time zone 'Asia/Jakarta')) >= 11 then 'siang'
+    else 'pagi'
+  end
+`;
+
+const unclaimedConditions = (query: MealQueryInput) => {
+  const conditions: SQL[] = [
+    isNotNull(attendanceRecords.checkInTime),
+    ne(attendanceRecords.status, "alpha"),
+    eq(employees.employmentStatus, "active"),
+    isNull(mealClaims.id),
+  ];
+  if (query.from) conditions.push(gte(attendanceRecords.date, query.from));
+  if (query.to) conditions.push(lte(attendanceRecords.date, query.to));
+  if (query.departmentId)
+    conditions.push(eq(employees.departmentId, query.departmentId));
+  if (query.positionId)
+    conditions.push(eq(employees.positionId, query.positionId));
+  return conditions;
+};
+
+const unclaimedTotals = async (query: MealQueryInput): Promise<Totals> => {
+  const [row] = await db
+    .select({
+      total: count(),
+      pagi: sql<number>`count(*) filter (where ${scheduleSession} = 'pagi')`.mapWith(
+        Number,
+      ),
+      siang: sql<number>`count(*) filter (where ${scheduleSession} = 'siang')`.mapWith(
+        Number,
+      ),
+      malam: sql<number>`count(*) filter (where ${scheduleSession} = 'malam')`.mapWith(
+        Number,
+      ),
+    })
+    .from(attendanceRecords)
+    .innerJoin(employees, eq(employees.id, attendanceRecords.employeeId))
+    .leftJoin(
+      workSchedules,
+      and(
+        eq(workSchedules.employeeId, attendanceRecords.employeeId),
+        eq(workSchedules.date, attendanceRecords.date),
+      ),
+    )
+    .leftJoin(shifts, eq(shifts.id, workSchedules.shiftId))
+    .leftJoin(
+      mealClaims,
+      and(
+        eq(mealClaims.employeeId, attendanceRecords.employeeId),
+        eq(mealClaims.date, attendanceRecords.date),
+      ),
+    )
+    .where(and(...unclaimedConditions(query)));
+  return row ?? emptyTotals();
+};
+
+export async function listAnyMealClaims(query: MealQueryInput) {
+  const conditions = claimConditions(query);
+  const [totals, unclaimed] = await Promise.all([
+    claimTotals(conditions),
+    unclaimedTotals(query),
+  ]);
+
+  const detailConditions = [...conditions];
+  if (query.session)
+    detailConditions.push(eq(mealClaims.session, query.session));
 
   const rows = await db
     .select({
@@ -125,24 +250,71 @@ export async function listAnyMealClaims(query: MealQueryInput) {
     .from(mealClaims)
     .innerJoin(employees, eq(employees.id, mealClaims.employeeId))
     .leftJoin(departments, eq(departments.id, employees.departmentId))
-    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .where(
+      detailConditions.length > 0 ? and(...detailConditions) : undefined,
+    )
     .orderBy(desc(mealClaims.date), desc(mealClaims.claimedAt))
     .limit(query.limit + 1)
     .offset(query.offset);
 
-  const data = rows.slice(0, query.limit);
-  const totals = data.reduce(
-    (acc, row) => ({
-      total: acc.total + 1,
-      pagi: acc.pagi + (row.session === "pagi" ? 1 : 0),
-      siang: acc.siang + (row.session === "siang" ? 1 : 0),
-      malam: acc.malam + (row.session === "malam" ? 1 : 0),
-    }),
-    { total: 0, pagi: 0, siang: 0, malam: 0 },
-  );
+  return {
+    data: rows.slice(0, query.limit),
+    meta: {
+      limit: query.limit,
+      offset: query.offset,
+      hasMore: rows.length > query.limit,
+      totals,
+      unclaimed,
+    },
+  };
+}
+
+export async function listAnyUnclaimedMeals(query: MealQueryInput) {
+  const conditions = unclaimedConditions(query);
+  const totals = await unclaimedTotals(query);
+
+  const detailConditions = [...conditions];
+  if (query.session)
+    detailConditions.push(sql`${scheduleSession} = ${query.session}`);
+
+  const rows = await db
+    .select({
+      employeeId: attendanceRecords.employeeId,
+      employeeName: employees.fullName,
+      employeeNik: employees.nik,
+      departmentName: departments.name,
+      date: attendanceRecords.date,
+      session: scheduleSession,
+      shiftName: shifts.name,
+    })
+    .from(attendanceRecords)
+    .innerJoin(employees, eq(employees.id, attendanceRecords.employeeId))
+    .leftJoin(departments, eq(departments.id, employees.departmentId))
+    .leftJoin(
+      workSchedules,
+      and(
+        eq(workSchedules.employeeId, attendanceRecords.employeeId),
+        eq(workSchedules.date, attendanceRecords.date),
+      ),
+    )
+    .leftJoin(shifts, eq(shifts.id, workSchedules.shiftId))
+    .leftJoin(
+      mealClaims,
+      and(
+        eq(mealClaims.employeeId, attendanceRecords.employeeId),
+        eq(mealClaims.date, attendanceRecords.date),
+      ),
+    )
+    .where(and(...detailConditions))
+    .orderBy(
+      desc(attendanceRecords.date),
+      asc(employees.fullName),
+    )
+    .limit(query.limit + 1)
+    .offset(query.offset);
 
   return {
-    data,
+    data: rows.slice(0, query.limit),
     meta: {
       limit: query.limit,
       offset: query.offset,

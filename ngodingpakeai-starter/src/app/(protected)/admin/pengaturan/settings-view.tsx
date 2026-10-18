@@ -1,8 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { ROLE_LABELS } from "@/lib/permissions";
 
 type Settings = {
   name: string;
@@ -74,7 +77,13 @@ const LEVELS = [
   },
 ] as const;
 
-export function SettingsView() {
+export function SettingsView({
+  userEmail,
+  userRole,
+}: {
+  userEmail: string;
+  userRole: string;
+}) {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -145,6 +154,26 @@ export function SettingsView() {
     }
   }, [settings]);
 
+  const clearNotifications = useCallback(async () => {
+    if (!window.confirm("Hapus seluruh riwayat notifikasi Anda?")) return;
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const response = await fetch("/api/notifications", { method: "DELETE" });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        setError(body?.error?.message ?? "Riwayat notifikasi gagal dihapus.");
+        return;
+      }
+      setNotice("Riwayat notifikasi dihapus.");
+    } catch {
+      setError("Jaringan bermasalah. Coba lagi.");
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
   if (loading) {
     return (
       <p className="mx-auto max-w-xl text-sm text-muted-foreground">
@@ -188,6 +217,14 @@ export function SettingsView() {
       )}
 
       <section className="mt-6 grid gap-3 rounded-lg border bg-card p-5">
+        <div>
+          <h2 className="text-lg font-semibold tracking-tight">
+            Profil perusahaan
+          </h2>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            Identitas dan zona waktu yang dipakai seluruh aplikasi.
+          </p>
+        </div>
         <label className="grid gap-1.5 text-sm">
           <span className="font-medium">Nama perusahaan</span>
           <input
@@ -212,6 +249,14 @@ export function SettingsView() {
             <option value="Asia/Jayapura">WIT (UTC+9)</option>
           </select>
         </label>
+        <div className="mt-2 border-t border-border pt-4">
+          <h2 className="text-lg font-semibold tracking-tight">
+            Aturan absensi
+          </h2>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            Batas akurasi GPS, radius default, dan toleransi keterlambatan.
+          </p>
+        </div>
         <div className="grid grid-cols-2 gap-3">
           <label className="grid gap-1.5 text-sm">
             <span className="font-medium">Batas akurasi GPS (m)</span>
@@ -256,6 +301,28 @@ export function SettingsView() {
             }
           />
         </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="size-4 accent-current"
+            checked={settings.allowHolidayWork}
+            onChange={(event) =>
+              setSettings({
+                ...settings,
+                allowHolidayWork: event.target.checked,
+              })
+            }
+          />
+          <span>Izinkan absensi pada hari libur</span>
+        </label>
+        <div className="mt-2 border-t border-border pt-4">
+          <h2 className="text-lg font-semibold tracking-tight">
+            Kalender &amp; penggajian
+          </h2>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            Tanggal gajian dan agenda yang muncul di kalender HRD.
+          </p>
+        </div>
         <label className="grid gap-1.5 text-sm">
           <span className="font-medium">Tanggal gajian (1–28)</span>
           <input
@@ -275,100 +342,77 @@ export function SettingsView() {
             Tanggal ini ditandai sebagai agenda gajian di kalender HRD.
           </span>
         </label>
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            className="size-4 accent-current"
-            checked={settings.allowHolidayWork}
-            onChange={(event) =>
-              setSettings({
-                ...settings,
-                allowHolidayWork: event.target.checked,
-              })
-            }
-          />
-          <span>Izinkan absensi pada hari libur</span>
-        </label>
         <Button disabled={busy} onClick={() => void save()}>
-          {busy ? "Menyimpan…" : "Simpan pengaturan"}
+          {busy ? "Menyimpan..." : "Simpan pengaturan"}
         </Button>
       </section>
 
-      <section aria-labelledby="wajah-title" className="mt-8">
-        <h2 id="wajah-title" className="text-lg font-semibold tracking-tight">
-          Verifikasi wajah
+      <section aria-labelledby="notifikasi-title" className="mt-8">
+        <h2
+          id="notifikasi-title"
+          className="text-lg font-semibold tracking-tight"
+        >
+          Notifikasi admin
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Opsional. Bila aktif, setiap absen masuk/pulang diverifikasi dengan
-          foto referensi wajah karyawan. Karyawan mendaftarkan wajahnya dari
-          halaman Profil.
+          Aktivitas seperti karyawan baru mendaftar dan pengajuan yang masuk
+          akan muncul di pusat notifikasi admin.
         </p>
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-5">
+          <div>
+            <p className="font-medium">Pusat notifikasi</p>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              Lihat aktivitas terbaru, filter, tandai dibaca, atau hapus
+              riwayat.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/admin/notifikasi">
+              <Button variant="outline" size="sm">
+                Buka pusat notifikasi
+              </Button>
+            </Link>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={busy}
+              onClick={() => void clearNotifications()}
+            >
+              <Trash2 aria-hidden="true" />
+              Hapus riwayat
+            </Button>
+          </div>
+        </div>
+      </section>
 
-        {!settings.faceProviderConfigured && (
-          <p
-            role="alert"
-            className="mt-3 rounded-lg border border-danger/40 bg-card px-4 py-3 text-sm text-danger"
-          >
-            Provider verifikasi wajah belum dikonfigurasi di server
-            (FACE_PROVIDER / FACE_API_URL / FACE_API_KEY). Verifikasi tidak
-            dapat diaktifkan sampai env diisi.
-          </p>
-        )}
-
-        <div className="mt-4 grid gap-3 rounded-lg border bg-card p-5">
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              className="size-4 accent-current"
-              checked={settings.faceVerificationEnabled}
-              disabled={!settings.faceProviderConfigured}
-              onChange={(event) =>
-                setSettings({
-                  ...settings,
-                  faceVerificationEnabled: event.target.checked,
-                })
-              }
-            />
-            <span>Wajibkan verifikasi wajah saat absen</span>
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              className="size-4 accent-current"
-              checked={settings.faceLivenessRequired}
-              onChange={(event) =>
-                setSettings({
-                  ...settings,
-                  faceLivenessRequired: event.target.checked,
-                })
-              }
-            />
-            <span>Wajib liveness (anti-foto/rekaman layar)</span>
-          </label>
-          <label className="grid gap-1.5 text-sm">
-            <span className="font-medium">
-              Ambang kemiripan wajah ({settings.faceSimilarityThreshold}%)
-            </span>
-            <input
-              type="number"
-              min={1}
-              max={100}
-              className="h-10 w-full rounded-md border border-border bg-card px-3 text-sm"
-              value={settings.faceSimilarityThreshold}
-              onChange={(event) =>
-                setSettings({
-                  ...settings,
-                  faceSimilarityThreshold: Number(event.target.value),
-                })
-              }
-            />
-            <span className="text-xs text-muted-foreground">
-              Skor kemiripan minimal agar absen diterima. 60% disarankan.
-            </span>
-          </label>
-          <Button disabled={busy} onClick={() => void save()}>
-            {busy ? "Menyimpan…" : "Simpan pengaturan wajah"}
-          </Button>
+      <section aria-labelledby="akun-title" className="mt-8">
+        <h2 id="akun-title" className="text-lg font-semibold tracking-tight">
+          Akun &amp; keamanan
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Informasi akun admin yang sedang dipakai.
+        </p>
+        <div className="mt-4 grid gap-3 rounded-lg border bg-card p-5 sm:grid-cols-2">
+          <div>
+            <p className="text-sm text-muted-foreground">Email</p>
+            <p className="mt-0.5 font-medium break-all">{userEmail}</p>
+          </div>
+          <div>
+            <p className="text-sm text-muted-foreground">Peran</p>
+            <p className="mt-0.5 font-medium">
+              {userRole
+                .split(",")
+                .map((role) => ROLE_LABELS[role.trim()] ?? role.trim())
+                .join(" · ") || "HRD"}
+            </p>
+          </div>
+          <div className="sm:col-span-2">
+            <Link href="/forgot-password">
+              <Button variant="outline" size="sm">
+                Ubah kata sandi
+              </Button>
+            </Link>
+          </div>
         </div>
       </section>
 

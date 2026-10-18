@@ -23,6 +23,7 @@
     "db:studio": "drizzle-kit studio",
     "seed": "node scripts/seed.mjs",
     "demo:accounts": "node scripts/demo-accounts.mjs",
+    "demo:data": "node scripts/seed-demo-data.mjs",
     "employee:link": "node scripts/link-employee.mjs",
     "doctor": "node scripts/doctor.mjs",
     "test": "node scripts/test.mjs unit",

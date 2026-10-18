@@ -8,7 +8,6 @@ import {
   Plus,
   RefreshCw,
   Trash2,
-  Wand2,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -103,7 +102,7 @@ const toIso = (date: Date) => isoDate(date);
 const daysBetween = (from: string, to: string) =>
   Math.round((parseIso(to).getTime() - parseIso(from).getTime()) / 86_400_000);
 
-export function ScheduleGrid({ embedded = false }: { embedded?: boolean }) {
+export function ScheduleGrid() {
   const [view, setView] = useState<ViewMode>("week");
   const [anchor, setAnchor] = useState(() => new Date());
   const [rows, setRows] = useState<ScheduleRow[]>([]);
@@ -117,7 +116,6 @@ export function ScheduleGrid({ embedded = false }: { embedded?: boolean }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [target, setTarget] = useState<CellTarget | null>(null);
   const [formShift, setFormShift] = useState("");
-  const [formLocation, setFormLocation] = useState("");
   const [formNote, setFormNote] = useState("");
   const [filterPosition, setFilterPosition] = useState("");
   const [filterShift, setFilterShift] = useState("");
@@ -125,14 +123,6 @@ export function ScheduleGrid({ embedded = false }: { embedded?: boolean }) {
   const [calendarOpen, setCalendarOpen] = useState(false);
   const calendarWrapperRef = useRef<HTMLDivElement>(null);
   const calendarTriggerRef = useRef<HTMLButtonElement>(null);
-  const [addOpen, setAddOpen] = useState(false);
-  const [addEmployeeIds, setAddEmployeeIds] = useState<string[]>([]);
-  const [addQuery, setAddQuery] = useState("");
-  const [addFrom, setAddFrom] = useState("");
-  const [addTo, setAddTo] = useState("");
-  const [addShift, setAddShift] = useState("");
-  const [addLocation, setAddLocation] = useState("");
-  const [addNote, setAddNote] = useState("");
 
   const range = useMemo(() => {
     if (view === "range") {
@@ -227,32 +217,7 @@ export function ScheduleGrid({ embedded = false }: { embedded?: boolean }) {
     [view, employees, rows, dayIso, filterShift, positionMatches],
   );
 
-  const addDates = useMemo(() => {
-    if (!addFrom || !addTo || addTo < addFrom) return [];
-    const list: string[] = [];
-    let cursor = parseIso(addFrom);
-    const end = parseIso(addTo);
-    while (cursor <= end && list.length < 400) {
-      list.push(toIso(cursor));
-      cursor = addDays(cursor, 1);
-    }
-    return list;
-  }, [addFrom, addTo]);
-
-  const addRangeExceeds = addDates.length > 92;
-
-  const addCandidates = useMemo(() => {
-    const needle = addQuery.trim().toLowerCase();
-    return employees.filter(
-      (employee) =>
-        positionMatches(employee.id) &&
-        (!needle ||
-          employee.fullName.toLowerCase().includes(needle) ||
-          employee.nik.toLowerCase().includes(needle)),
-    );
-  }, [employees, addQuery, positionMatches]);
-
-  const addTotal = addEmployeeIds.length * addDates.length;
+  const primaryLocationId = locations[0]?.id ?? "";
 
   const loadSchedules = useCallback(async (from: string, to: string) => {
     const collected: ScheduleRow[] = [];
@@ -335,15 +300,14 @@ export function ScheduleGrid({ embedded = false }: { embedded?: boolean }) {
   }, [calendarOpen]);
 
   useEffect(() => {
-    if (!addOpen && !target) return;
+    if (!target) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || busy) return;
-      setAddOpen(false);
       setTarget(null);
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [addOpen, target, busy]);
+  }, [target, busy]);
 
   const applyCalendarSelection = (next: DateRange) => {
     setCalendarOpen(false);
@@ -360,86 +324,14 @@ export function ScheduleGrid({ embedded = false }: { embedded?: boolean }) {
     setAnchor(parseIso(next.from));
   };
 
-  const openCell = (employee: Employee, date: string) => {
-    const existing = scheduleMap.get(`${employee.id}|${date}`) ?? null;
-    setTarget({
-      employeeId: employee.id,
-      employeeName: employee.fullName,
-      date,
-      existing,
-    });
-    setFormShift(existing?.shiftId ?? shifts[0]?.id ?? "");
-    setFormLocation(existing?.workLocationId ?? locations[0]?.id ?? "");
-    setFormNote(existing?.note ?? "");
-  };
-
-  const openAddPanel = () => {
-    setAddOpen(true);
-    setAddEmployeeIds([]);
-    setAddQuery("");
-    setAddFrom(range.from);
-    setAddTo(range.to);
-    setAddShift(shifts[0]?.id ?? "");
-    setAddLocation(locations[0]?.id ?? "");
-    setAddNote("");
-    setNotice(null);
-    setError(null);
-  };
-
-  const toggleAddEmployee = (employeeId: string) => {
-    setAddEmployeeIds((current) =>
-      current.includes(employeeId)
-        ? current.filter((id) => id !== employeeId)
-        : [...current, employeeId],
-    );
-  };
-
-  const bulkSave = async () => {
-    if (
-      !addShift ||
-      !addLocation ||
-      addEmployeeIds.length === 0 ||
-      addDates.length === 0
-    )
-      return;
-    setBusy(true);
-    setError(null);
-    setNotice(null);
-    try {
-      const response = await fetch("/api/admin/schedules/bulk", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          employeeIds: addEmployeeIds,
-          dates: addDates,
-          shiftId: addShift,
-          workLocationId: addLocation,
-          note: addNote,
-        }),
-      });
-      const body = await response.json();
-      if (!response.ok) {
-        setError(
-          body?.error?.details?.[0]?.message ??
-            body?.error?.message ??
-            "Jadwal gagal disimpan.",
-        );
-        return;
-      }
-      setNotice(
-        `${body.data?.upserted ?? addTotal} jadwal tersimpan (${addEmployeeIds.length} karyawan × ${addDates.length} hari).`,
-      );
-      setAddOpen(false);
-      await load();
-    } catch {
-      setError("Jaringan bermasalah. Coba lagi.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const saveCell = async () => {
-    if (!target || !formShift || !formLocation) return;
+  const saveSchedule = async (
+    employeeId: string,
+    employeeName: string,
+    date: string,
+    shiftId: string,
+    note: string,
+  ) => {
+    if (!shiftId || !primaryLocationId) return;
     setBusy(true);
     setError(null);
     try {
@@ -447,12 +339,12 @@ export function ScheduleGrid({ embedded = false }: { embedded?: boolean }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          employeeId: target.employeeId,
-          date: target.date,
-          shiftId: formShift,
-          workLocationId: formLocation,
+          employeeId,
+          date,
+          shiftId,
+          workLocationId: primaryLocationId,
           allowedLocationIds: [],
-          note: formNote,
+          note,
         }),
       });
       const body = await response.json();
@@ -464,7 +356,7 @@ export function ScheduleGrid({ embedded = false }: { embedded?: boolean }) {
         );
         return;
       }
-      setNotice(`Jadwal ${target.employeeName} pada ${target.date} tersimpan.`);
+      setNotice(`Jadwal ${employeeName} pada ${date} tersimpan.`);
       setTarget(null);
       await load();
     } catch {
@@ -472,6 +364,34 @@ export function ScheduleGrid({ embedded = false }: { embedded?: boolean }) {
     } finally {
       setBusy(false);
     }
+  };
+
+  const openCell = (employee: Employee, date: string) => {
+    if (busy) return;
+    const existing = scheduleMap.get(`${employee.id}|${date}`) ?? null;
+    if (!existing && filterShift && primaryLocationId) {
+      void saveSchedule(employee.id, employee.fullName, date, filterShift, "");
+      return;
+    }
+    setTarget({
+      employeeId: employee.id,
+      employeeName: employee.fullName,
+      date,
+      existing,
+    });
+    setFormShift(existing?.shiftId || filterShift || shifts[0]?.id || "");
+    setFormNote(existing?.note ?? "");
+  };
+
+  const saveCell = async () => {
+    if (!target || !formShift || !primaryLocationId) return;
+    await saveSchedule(
+      target.employeeId,
+      target.employeeName,
+      target.date,
+      formShift,
+      formNote,
+    );
   };
 
   const removeCell = async () => {
@@ -491,35 +411,6 @@ export function ScheduleGrid({ embedded = false }: { embedded?: boolean }) {
       setNotice(`Jadwal ${target.employeeName} pada ${target.date} dihapus.`);
       setTarget(null);
       await load();
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const generateFromPattern = async () => {
-    setBusy(true);
-    setNotice(null);
-    try {
-      const response = await fetch("/api/admin/jobs/schedules", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ from: range.from, to: range.to }),
-      });
-      const body = await response.json();
-      if (!response.ok) {
-        setError(body?.error?.message ?? "Pembuatan jadwal otomatis gagal.");
-        return;
-      }
-      setNotice(
-        `Jadwal otomatis dibuat untuk periode ini: ${body.data?.upserted ?? 0} jadwal${
-          body.data?.skippedHoliday
-            ? `, ${body.data.skippedHoliday} hari libur dilewati`
-            : ""
-        }.`,
-      );
-      await load();
-    } catch {
-      setError("Tidak dapat menghubungi server.");
     } finally {
       setBusy(false);
     }
@@ -567,289 +458,6 @@ export function ScheduleGrid({ embedded = false }: { embedded?: boolean }) {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        {embedded ? (
-          <div>
-            <h2 className="text-lg font-semibold tracking-tight">
-              Buat Jadwal Kerja
-            </h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Klik{" "}
-              <span className="font-medium text-foreground">Tambah jadwal</span>{" "}
-              untuk memasang satu shift ke beberapa karyawan sekaligus, atau
-              klik satu sel tanggal karyawan untuk mengatur satu jadwal.
-            </p>
-          </div>
-        ) : (
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-              Jadwal Kerja
-            </h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Susun shift karyawan per hari, minggu, bulan, atau rentang tanggal
-              pilihan. Klik sel untuk mengatur shift, lokasi, dan catatan.
-            </p>
-          </div>
-        )}
-        <div className="flex flex-wrap gap-2">
-          <Button
-            size="sm"
-            disabled={busy || employees.length === 0}
-            onClick={openAddPanel}
-          >
-            <Plus aria-hidden="true" />
-            Tambah jadwal
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={busy}
-            onClick={() => void generateFromPattern()}
-          >
-            <Wand2 aria-hidden="true" />
-            Buat dari pola rutin
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={loading}
-            onClick={() => void load()}
-          >
-            <RefreshCw aria-hidden="true" />
-            Muat ulang
-          </Button>
-        </div>
-      </div>
-
-      {addOpen && (
-        <section
-          aria-labelledby="tambah-jadwal-title"
-          className="rounded-lg border border-border-strong bg-card p-5"
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h3 id="tambah-jadwal-title" className="text-lg font-semibold">
-                Tambah jadwal kerja
-              </h3>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Pilih karyawan, rentang tanggal, shift, dan lokasi. Jadwal yang
-                sudah ada pada tanggal yang sama akan diperbarui.
-              </p>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Tutup form tambah jadwal"
-              disabled={busy}
-              onClick={() => setAddOpen(false)}
-            >
-              <X aria-hidden="true" />
-            </Button>
-          </div>
-
-          <div className="mt-4 grid gap-5 lg:grid-cols-2">
-            <fieldset className="min-w-0">
-              <legend className="text-sm font-medium">
-                1. Karyawan{" "}
-                <span className="font-normal text-muted-foreground">
-                  ({addEmployeeIds.length} dipilih)
-                </span>
-              </legend>
-              <div className="mt-2 flex flex-wrap gap-2">
-                <input
-                  type="search"
-                  placeholder="Cari nama atau NIK…"
-                  aria-label="Cari karyawan"
-                  className="h-9 min-w-40 flex-1 rounded-md border border-border bg-card px-3 text-sm"
-                  value={addQuery}
-                  onChange={(event) => setAddQuery(event.target.value)}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={busy || addCandidates.length === 0}
-                  onClick={() =>
-                    setAddEmployeeIds(addCandidates.map((item) => item.id))
-                  }
-                >
-                  Pilih semua
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  disabled={busy || addEmployeeIds.length === 0}
-                  onClick={() => setAddEmployeeIds([])}
-                >
-                  Kosongkan
-                </Button>
-              </div>
-              <div className="mt-2 max-h-56 divide-y divide-border overflow-auto rounded-md border border-border">
-                {addCandidates.length === 0 ? (
-                  <p className="px-3 py-4 text-center text-sm text-muted-foreground">
-                    Tidak ada karyawan yang cocok.
-                  </p>
-                ) : (
-                  addCandidates.map((employee) => (
-                    <label
-                      key={employee.id}
-                      className="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm"
-                    >
-                      <input
-                        type="checkbox"
-                        className="size-4 accent-current"
-                        checked={addEmployeeIds.includes(employee.id)}
-                        onChange={() => toggleAddEmployee(employee.id)}
-                      />
-                      <span className="min-w-0 flex-1 truncate">
-                        {employee.fullName}
-                      </span>
-                      <span className="font-mono text-[11px] text-muted-foreground">
-                        {employee.nik}
-                      </span>
-                    </label>
-                  ))
-                )}
-              </div>
-              {filterPosition && (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Daftar mengikuti filter jabatan di atas.
-                </p>
-              )}
-            </fieldset>
-
-            <div className="grid content-start gap-3">
-              <p className="text-sm font-medium">2. Jadwal</p>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="grid gap-1.5 text-sm">
-                  <span className="text-muted-foreground">Tanggal mulai</span>
-                  <input
-                    type="date"
-                    className="h-10 w-full rounded-md border border-border bg-card px-3 text-sm"
-                    value={addFrom}
-                    onChange={(event) => setAddFrom(event.target.value)}
-                  />
-                </label>
-                <label className="grid gap-1.5 text-sm">
-                  <span className="text-muted-foreground">Tanggal selesai</span>
-                  <input
-                    type="date"
-                    className="h-10 w-full rounded-md border border-border bg-card px-3 text-sm"
-                    value={addTo}
-                    onChange={(event) => setAddTo(event.target.value)}
-                  />
-                </label>
-              </div>
-              <label className="grid gap-1.5 text-sm">
-                <span className="text-muted-foreground">Shift</span>
-                <select
-                  className="h-10 w-full rounded-md border border-border bg-card px-3 text-sm"
-                  value={addShift}
-                  onChange={(event) => setAddShift(event.target.value)}
-                >
-                  <option value="">Pilih shift</option>
-                  {shifts.map((shift) => (
-                    <option key={shift.id} value={shift.id}>
-                      {shift.name} · {shift.startTime.slice(0, 5)}–
-                      {shift.endTime.slice(0, 5)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="grid gap-1.5 text-sm">
-                <span className="text-muted-foreground">Lokasi kerja</span>
-                <select
-                  className="h-10 w-full rounded-md border border-border bg-card px-3 text-sm"
-                  value={addLocation}
-                  onChange={(event) => setAddLocation(event.target.value)}
-                >
-                  <option value="">Pilih lokasi</option>
-                  {locations.map((location) => (
-                    <option key={location.id} value={location.id}>
-                      {location.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="grid gap-1.5 text-sm">
-                <span className="text-muted-foreground">
-                  Catatan (opsional)
-                </span>
-                <input
-                  className="h-10 w-full rounded-md border border-border bg-card px-3 text-sm"
-                  value={addNote}
-                  onChange={(event) => setAddNote(event.target.value)}
-                  placeholder="Contoh: jadwal lembur akhir bulan"
-                />
-              </label>
-            </div>
-          </div>
-
-          {(shifts.length === 0 || locations.length === 0) && (
-            <p
-              role="alert"
-              className="mt-4 rounded-lg border border-danger/40 bg-card px-4 py-3 text-sm text-danger"
-            >
-              {shifts.length === 0
-                ? "Belum ada shift. Tambahkan dulu lewat bagian “Kelola shift” di bawah."
-                : "Belum ada lokasi kerja. Tambahkan dulu lewat menu Lokasi."}
-            </p>
-          )}
-
-          {addFrom && addTo && addTo < addFrom && (
-            <p
-              role="alert"
-              className="mt-4 rounded-lg border border-danger/40 bg-card px-4 py-3 text-sm text-danger"
-            >
-              Tanggal selesai harus setelah tanggal mulai.
-            </p>
-          )}
-
-          {addRangeExceeds && (
-            <p
-              role="alert"
-              className="mt-4 rounded-lg border border-danger/40 bg-card px-4 py-3 text-sm text-danger"
-            >
-              Rentang maksimal 92 hari sekali simpan. Bagi menjadi beberapa kali
-              simpan.
-            </p>
-          )}
-
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <Button
-              disabled={
-                busy ||
-                !addShift ||
-                !addLocation ||
-                addEmployeeIds.length === 0 ||
-                addDates.length === 0 ||
-                addRangeExceeds
-              }
-              onClick={() => void bulkSave()}
-            >
-              {busy
-                ? "Menyimpan…"
-                : addTotal > 0
-                  ? `Simpan ${addTotal} jadwal`
-                  : "Simpan jadwal"}
-            </Button>
-            <Button
-              variant="outline"
-              disabled={busy}
-              onClick={() => setAddOpen(false)}
-            >
-              Batal
-            </Button>
-            <span className="text-sm text-muted-foreground">
-              {addEmployeeIds.length > 0 && addDates.length > 0
-                ? `${addEmployeeIds.length} karyawan × ${addDates.length} hari = ${addTotal} jadwal`
-                : "Pilih minimal satu karyawan dan satu tanggal."}
-            </span>
-          </div>
-        </section>
-      )}
-
       {notice && (
         <p
           role="status"
@@ -946,6 +554,15 @@ export function ScheduleGrid({ embedded = false }: { embedded?: boolean }) {
             </div>
           )}
         </div>
+        <Button
+          variant="outline"
+          size="icon-sm"
+          disabled={loading}
+          onClick={() => void load()}
+          aria-label="Muat ulang jadwal"
+        >
+          <RefreshCw aria-hidden="true" />
+        </Button>
         <div
           role="tablist"
           aria-label="Tampilan jadwal"
@@ -1011,7 +628,8 @@ export function ScheduleGrid({ embedded = false }: { embedded?: boolean }) {
             <option value="">Semua shift</option>
             {shifts.map((shift) => (
               <option key={shift.id} value={shift.id}>
-                {shift.name}
+                {shift.name} - {shift.startTime.slice(0, 5)}-
+                {shift.endTime.slice(0, 5)}
               </option>
             ))}
           </select>
@@ -1032,6 +650,13 @@ export function ScheduleGrid({ embedded = false }: { embedded?: boolean }) {
           Reset filter
         </Button>
       </div>
+
+      {filterShift && (
+        <p className="text-xs text-muted-foreground">
+          Klik sel kosong untuk langsung mengisi shift ini. Klik jadwal yang
+          sudah ada untuk mengubahnya.
+        </p>
+      )}
 
       <ul className="flex flex-wrap gap-x-4 gap-y-2">
         {shifts.map((shift) => {
@@ -1237,8 +862,9 @@ export function ScheduleGrid({ embedded = false }: { embedded?: boolean }) {
                                     ? "flex min-h-14 w-full flex-col justify-center rounded-md border border-black/5 px-2 py-1.5 text-left transition-transform hover:scale-[1.02]"
                                     : "flex min-h-14 w-full flex-col items-center justify-center rounded-md border border-dashed border-border text-muted-foreground transition-colors hover:border-border-strong hover:text-foreground") +
                                   (filterShift !== "" &&
-                                  (row?.shiftId ?? "") !== filterShift
-                                    ? " opacity-20"
+                                  row &&
+                                  row.shiftId !== filterShift
+                                    ? " opacity-30"
                                     : "")
                                 }
                                 style={
@@ -1320,7 +946,7 @@ export function ScheduleGrid({ embedded = false }: { embedded?: boolean }) {
               >
                 {shifts.length === 0
                   ? "Belum ada shift. Tambahkan dulu lewat bagian “Kelola shift”."
-                  : "Belum ada lokasi kerja. Tambahkan dulu lewat menu Lokasi."}
+                  : "Belum ada lokasi kerja. Atur dulu lewat menu Lokasi & Radius."}
               </p>
             )}
 
@@ -1342,21 +968,6 @@ export function ScheduleGrid({ embedded = false }: { embedded?: boolean }) {
                 </select>
               </label>
               <label className="grid gap-1.5 text-sm">
-                <span className="font-medium">Lokasi kerja</span>
-                <select
-                  className="h-10 w-full rounded-md border border-border bg-card px-3 text-sm"
-                  value={formLocation}
-                  onChange={(event) => setFormLocation(event.target.value)}
-                >
-                  <option value="">Pilih lokasi</option>
-                  {locations.map((location) => (
-                    <option key={location.id} value={location.id}>
-                      {location.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="grid gap-1.5 text-sm">
                 <span className="font-medium">Catatan (opsional)</span>
                 <input
                   className="h-10 w-full rounded-md border border-border bg-card px-3 text-sm"
@@ -1370,7 +981,7 @@ export function ScheduleGrid({ embedded = false }: { embedded?: boolean }) {
             <div className="mt-5 flex flex-wrap gap-2">
               <Button
                 className="flex-1"
-                disabled={busy || !formShift || !formLocation}
+                disabled={busy || !formShift || !primaryLocationId}
                 onClick={() => void saveCell()}
               >
                 {busy ? "Menyimpan…" : "Simpan jadwal"}

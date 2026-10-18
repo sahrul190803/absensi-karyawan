@@ -2,6 +2,7 @@ import "server-only";
 import { and, count, desc, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { notificationLogs, notifications, user } from "@/db/schema";
+import { ApiError } from "@/lib/api";
 import { sendMail } from "@/lib/mail";
 import type { ListQueryInput } from "@/validators/common";
 
@@ -53,6 +54,56 @@ export async function markAllOwnRead(userId: string) {
     )
     .returning({ id: notifications.id });
   return { updated: updated.length };
+}
+
+export async function deleteOwnNotification(userId: string, id: string) {
+  const [row] = await db
+    .delete(notifications)
+    .where(
+      and(eq(notifications.id, id), eq(notifications.userId, userId)),
+    )
+    .returning({ id: notifications.id });
+  if (!row)
+    throw new ApiError(404, "NOT_FOUND", "Notifikasi tidak ditemukan.");
+  return row;
+}
+
+export async function clearOwnNotifications(userId: string) {
+  const removed = await db
+    .delete(notifications)
+    .where(eq(notifications.userId, userId))
+    .returning({ id: notifications.id });
+  return { deleted: removed.length };
+}
+
+// Notifikasi in-app untuk seluruh HRD/admin/HOD. Dipakai untuk aktivitas
+// yang perlu diketahui manajer, mis. karyawan baru atau pengajuan baru.
+export async function notifyManagersInApp(input: {
+  type: string;
+  title: string;
+  body: string;
+}) {
+  const managers = await db
+    .select({ id: user.id, role: user.role })
+    .from(user);
+  const ids = managers
+    .filter((row) =>
+      (row.role ?? "")
+        .split(",")
+        .map((role) => role.trim())
+        .some((role) => ["hrd", "admin", "hod"].includes(role)),
+    )
+    .map((row) => row.id);
+  if (ids.length === 0) return { created: 0 };
+  await db.insert(notifications).values(
+    ids.map((userId) => ({
+      userId,
+      type: input.type,
+      title: input.title,
+      body: input.body,
+    })),
+  );
+  return { created: ids.length };
 }
 
 type NotifyInput = {

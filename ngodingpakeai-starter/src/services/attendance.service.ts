@@ -54,6 +54,7 @@ const recordFields = {
   checkOutAccuracy: attendanceRecords.checkOutAccuracy,
   checkOutDistance: attendanceRecords.checkOutDistance,
   status: attendanceRecords.status,
+  lateMinutes: attendanceRecords.lateMinutes,
   notes: attendanceRecords.notes,
   createdAt: attendanceRecords.createdAt,
   updatedAt: attendanceRecords.updatedAt,
@@ -150,7 +151,10 @@ const getSchedule = async (employeeId: string, date: string) => {
     })
     .from(workSchedules)
     .innerJoin(shifts, eq(shifts.id, workSchedules.shiftId))
-    .innerJoin(workLocations, eq(workLocations.id, workSchedules.workLocationId))
+    .innerJoin(
+      workLocations,
+      eq(workLocations.id, workSchedules.workLocationId),
+    )
     .where(
       and(
         eq(workSchedules.employeeId, employeeId),
@@ -209,7 +213,10 @@ const getScheduleById = async (id: string) => {
     })
     .from(workSchedules)
     .innerJoin(shifts, eq(shifts.id, workSchedules.shiftId))
-    .innerJoin(workLocations, eq(workLocations.id, workSchedules.workLocationId))
+    .innerJoin(
+      workLocations,
+      eq(workLocations.id, workSchedules.workLocationId),
+    )
     .where(eq(workSchedules.id, id))
     .limit(1);
   if (!schedule) return null;
@@ -237,7 +244,11 @@ const getRecordLocation = async (locationId: string) => {
 const storePhoto = async (dataUrl: string, name: string) => {
   const match = dataUrl.match(/^data:(image\/(?:jpeg|png));base64,(.+)$/);
   if (!match)
-    throw new ApiError(422, "INVALID_PHOTO", "Foto harus berformat JPEG atau PNG.");
+    throw new ApiError(
+      422,
+      "INVALID_PHOTO",
+      "Foto harus berformat JPEG atau PNG.",
+    );
   const mimeType = match[1];
   const buffer = Buffer.from(match[2], "base64");
   if (buffer.byteLength > MAX_PHOTO_BYTES)
@@ -325,13 +336,8 @@ const validateGeofence = (
 
 type PingCoordinates = { latitude: number; longitude: number };
 
-const nearestTarget = (
-  input: PingCoordinates,
-  targets: GeofenceTarget[],
-) => {
-  let best:
-    | { distance: number; target: GeofenceTarget }
-    | undefined;
+const nearestTarget = (input: PingCoordinates, targets: GeofenceTarget[]) => {
+  let best: { distance: number; target: GeofenceTarget } | undefined;
   for (const target of targets) {
     const distance = haversineDistanceMeters(
       input.latitude,
@@ -339,8 +345,7 @@ const nearestTarget = (
       target.locationLat,
       target.locationLng,
     );
-    if (!best || distance < best.distance)
-      best = { distance, target };
+    if (!best || distance < best.distance) best = { distance, target };
   }
   if (!best)
     throw new ApiError(404, "NOT_FOUND", "Lokasi kerja tidak ditemukan.");
@@ -410,7 +415,10 @@ const resolvePingLocation = (
     };
   }
 
-  const coordinates = { latitude: input.latitude!, longitude: input.longitude! };
+  const coordinates = {
+    latitude: input.latitude!,
+    longitude: input.longitude!,
+  };
   if (locationFree) {
     // Catat perkiraan jarak bila memungkinkan, tanpa menolak absen.
     try {
@@ -551,9 +559,17 @@ export async function checkIn(userId: string, input: AttendancePingInput) {
 
   const now = new Date();
   const nowMinutes = minutesInTimezone(timezone, now);
-  const late =
+  const lateThreshold =
     nowMinutes - toMinutes(schedule.startTime) > schedule.toleranceMinutes;
-  const status = isHolidayWork ? "holiday_work" : late ? "late" : "present";
+  const tardyMinutes = Math.max(
+    0,
+    nowMinutes - toMinutes(schedule.startTime) - schedule.toleranceMinutes,
+  );
+  const status = isHolidayWork
+    ? "holiday_work"
+    : lateThreshold
+      ? "late"
+      : "present";
 
   const [record] = await db
     .insert(attendanceRecords)
@@ -571,6 +587,7 @@ export async function checkIn(userId: string, input: AttendancePingInput) {
       deviceId,
       ...(input.placeNote ? { notes: input.placeNote } : {}),
       status,
+      lateMinutes: lateThreshold ? Math.max(1, tardyMinutes) : 0,
     })
     .returning(recordFields);
 
@@ -825,7 +842,10 @@ export async function getAttendanceDetail(
     })
     .from(attendanceRecords)
     .innerJoin(employees, eq(employees.id, attendanceRecords.employeeId))
-    .innerJoin(workLocations, eq(workLocations.id, attendanceRecords.workLocationId))
+    .innerJoin(
+      workLocations,
+      eq(workLocations.id, attendanceRecords.workLocationId),
+    )
     .where(eq(attendanceRecords.id, id))
     .limit(1);
   if (!record) throw new ApiError(404, "NOT_FOUND", "Absensi tidak ditemukan.");

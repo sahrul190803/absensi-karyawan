@@ -21,12 +21,16 @@ export function DonutChart({
   centerLabel = "Total",
   size = 168,
   className,
+  onSelect,
+  activeLabel,
 }: {
   data: ChartDatum[];
   title: string;
   centerLabel?: string;
   size?: number;
   className?: string;
+  onSelect?: (label: string) => void;
+  activeLabel?: string | null;
 }) {
   const total = data.reduce((sum, item) => sum + item.value, 0);
   const radius = 60;
@@ -87,11 +91,9 @@ export function DonutChart({
         {data.map((item, index) => {
           const percent =
             total === 0 ? 0 : Math.round((item.value / total) * 100);
-          return (
-            <li
-              key={item.label}
-              className="flex items-center justify-between gap-4 text-sm"
-            >
+          const active = activeLabel === item.label;
+          const content = (
+            <>
               <span className="flex min-w-0 items-center gap-2">
                 <span
                   aria-hidden="true"
@@ -108,6 +110,27 @@ export function DonutChart({
                 {item.value}
                 <span className="ml-1.5">{percent}%</span>
               </span>
+            </>
+          );
+          return (
+            <li key={item.label}>
+              {onSelect ? (
+                <button
+                  type="button"
+                  onClick={() => onSelect(item.label)}
+                  aria-pressed={active}
+                  className={cn(
+                    "-mx-2 flex w-full items-center justify-between gap-4 rounded-md px-2 py-1 text-left text-sm transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring",
+                    active && "bg-primary-quiet",
+                  )}
+                >
+                  {content}
+                </button>
+              ) : (
+                <span className="flex items-center justify-between gap-4 text-sm">
+                  {content}
+                </span>
+              )}
             </li>
           );
         })}

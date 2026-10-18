@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
-import { Crosshair, MapPin, Plus, Trash2 } from "lucide-react";
+import { Crosshair } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const LocationMap = dynamic(
@@ -25,7 +25,6 @@ type WorkLocation = {
   latitude: number;
   longitude: number;
   radiusM: number;
-  description: string;
   active: boolean;
 };
 
@@ -36,8 +35,6 @@ type Draft = {
   latitude: number;
   longitude: number;
   radiusM: number;
-  description: string;
-  active: boolean;
 };
 
 const DEFAULT_CENTER = { latitude: -6.2088, longitude: 106.8456 };
@@ -49,12 +46,9 @@ const emptyDraft = (): Draft => ({
   latitude: DEFAULT_CENTER.latitude,
   longitude: DEFAULT_CENTER.longitude,
   radiusM: 100,
-  description: "",
-  active: true,
 });
 
 export function LocationAdmin() {
-  const [locations, setLocations] = useState<WorkLocation[]>([]);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -72,7 +66,19 @@ export function LocationAdmin() {
         setError(body?.error?.message ?? "Gagal memuat lokasi kerja.");
         return;
       }
-      setLocations(body.data ?? []);
+      const [primary] = (body.data ?? []) as WorkLocation[];
+      setDraft(
+        primary
+          ? {
+              id: primary.id,
+              name: primary.name,
+              address: primary.address,
+              latitude: primary.latitude,
+              longitude: primary.longitude,
+              radiusM: primary.radiusM,
+            }
+          : emptyDraft(),
+      );
       setError(null);
     } catch {
       setError("Tidak dapat menghubungi server.");
@@ -120,8 +126,7 @@ export function LocationAdmin() {
         latitude: draft.latitude,
         longitude: draft.longitude,
         radiusM: draft.radiusM,
-        description: draft.description,
-        active: draft.active,
+        active: true,
       };
       const response = await fetch(
         draft.id ? `/api/work-locations/${draft.id}` : "/api/work-locations",
@@ -140,8 +145,7 @@ export function LocationAdmin() {
         );
         return;
       }
-      setNotice(draft.id ? "Lokasi diperbarui." : "Lokasi baru ditambahkan.");
-      setDraft(null);
+      setNotice("Lokasi kerja tersimpan.");
       await load();
     } catch {
       setError("Jaringan bermasalah. Coba lagi.");
@@ -150,54 +154,23 @@ export function LocationAdmin() {
     }
   };
 
-  const remove = async (id: string) => {
-    if (!window.confirm("Hapus lokasi kerja ini?")) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const response = await fetch(`/api/work-locations/${id}`, {
-        method: "DELETE",
-      });
-      const body = await response.json();
-      if (!response.ok) {
-        setError(body?.error?.message ?? "Lokasi gagal dihapus.");
-        return;
-      }
-      setNotice("Lokasi dihapus.");
-      if (draft?.id === id) setDraft(null);
-      await load();
-    } finally {
-      setBusy(false);
-    }
-  };
-
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-            Lokasi &amp; Radius
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Atur titik kantor dan radius geofence langsung dari peta. Klik peta
-            atau geser pin untuk memindahkan titik.
-          </p>
-        </div>
-        <Button
-          size="sm"
-          onClick={() =>
-            setDraft((current) =>
-              current ? null : { ...emptyDraft(), ...DEFAULT_CENTER },
-            )
-          }
-        >
-          <Plus aria-hidden="true" />
-          {draft && !draft.id ? "Tutup form" : "Tambah lokasi"}
-        </Button>
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+          Lokasi &amp; Radius
+        </h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Tentukan titik cafe dan radius absen. Hanya ada satu lokasi kerja,
+          jadi semua jadwal dan absensi memakai lokasi ini.
+        </p>
       </div>
 
       {notice && (
-        <p role="status" className="rounded-lg border bg-card px-4 py-3 text-sm">
+        <p
+          role="status"
+          className="rounded-lg border bg-card px-4 py-3 text-sm"
+        >
           {notice}
         </p>
       )}
@@ -210,94 +183,40 @@ export function LocationAdmin() {
         </p>
       )}
 
-      <div className="grid gap-5 lg:grid-cols-5">
-        <section className="space-y-3 lg:col-span-2">
-          {loading ? (
-            <p className="text-sm text-muted-foreground">Memuat lokasi…</p>
-          ) : locations.length === 0 ? (
-            <div className="rounded-lg border border-dashed bg-card px-6 py-12 text-center">
-              <MapPin
-                className="mx-auto size-6 text-muted-foreground"
-                aria-hidden="true"
-              />
-              <p className="mt-3 text-sm text-muted-foreground">
-                Belum ada lokasi kerja. Tambahkan lokasi pertama.
+      {loading || !draft ? (
+        <p className="text-sm text-muted-foreground">Memuat lokasi…</p>
+      ) : (
+        <div className="grid gap-5 lg:grid-cols-5">
+          <section className="space-y-3 lg:col-span-2">
+            <div className="rounded-lg border bg-card p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-semibold">
+                    {draft.name || "Lokasi kerja belum dinamai"}
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {draft.address || "Tanpa alamat"}
+                  </p>
+                </div>
+                <span className="rounded-full bg-positive px-2.5 py-0.5 text-xs font-semibold text-white">
+                  Aktif
+                </span>
+              </div>
+              <p className="mt-2 font-mono text-xs text-muted-foreground">
+                {draft.latitude.toFixed(5)}, {draft.longitude.toFixed(5)} ·
+                radius {draft.radiusM} m
               </p>
             </div>
-          ) : (
-            <ul className="space-y-3">
-              {locations.map((location) => (
-                <li
-                  key={location.id}
-                  className={`rounded-lg border p-4 ${
-                    draft?.id === location.id
-                      ? "border-border-strong bg-primary-quiet/50"
-                      : "bg-card"
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="font-semibold">{location.name}</p>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        {location.address || "Tanpa alamat"}
-                      </p>
-                    </div>
-                    <span
-                      className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                        location.active
-                          ? "bg-positive text-white"
-                          : "border border-border-strong bg-muted text-muted-foreground"
-                      }`}
-                    >
-                      {location.active ? "Aktif" : "Nonaktif"}
-                    </span>
-                  </div>
-                  <p className="mt-2 font-mono text-xs text-muted-foreground">
-                    {location.latitude.toFixed(5)},{" "}
-                    {location.longitude.toFixed(5)} · radius {location.radiusM} m
-                  </p>
-                  <div className="mt-3 flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="xs"
-                      onClick={() =>
-                        setDraft({
-                          id: location.id,
-                          name: location.name,
-                          address: location.address,
-                          latitude: location.latitude,
-                          longitude: location.longitude,
-                          radiusM: location.radiusM,
-                          description: location.description,
-                          active: location.active,
-                        })
-                      }
-                    >
-                      Ubah di peta
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="xs"
-                      disabled={busy}
-                      onClick={() => void remove(location.id)}
-                    >
-                      <Trash2 aria-hidden="true" />
-                      Hapus
-                    </Button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+            <p className="text-xs text-muted-foreground">
+              Klik peta atau geser pin untuk memindahkan titik. Semua jadwal
+              baru otomatis memakai lokasi ini.
+            </p>
+          </section>
 
-        <section className="lg:col-span-3">
-          {draft ? (
+          <section className="lg:col-span-3">
             <div className="space-y-4 rounded-lg border border-border-strong bg-card p-5">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <h2 className="font-semibold">
-                  {draft.id ? `Ubah: ${draft.name}` : "Lokasi baru"}
-                </h2>
+                <h2 className="font-semibold">Atur lokasi cafe</h2>
                 <Button
                   variant="outline"
                   size="xs"
@@ -335,7 +254,7 @@ export function LocationAdmin() {
                     onChange={(event) =>
                       setDraft({ ...draft, name: event.target.value })
                     }
-                    placeholder="Contoh: Lecarassa Cabang Kemang"
+                    placeholder="Contoh: Cafe Kemang"
                   />
                 </label>
                 <label className="grid gap-1.5 text-sm sm:col-span-2">
@@ -378,7 +297,7 @@ export function LocationAdmin() {
                     }
                   />
                 </label>
-                <label className="grid gap-1.5 text-sm">
+                <label className="grid gap-1.5 text-sm sm:col-span-2">
                   <span className="font-medium">
                     Radius absen:{" "}
                     <span className="font-mono">{draft.radiusM} m</span>
@@ -397,17 +316,6 @@ export function LocationAdmin() {
                     }
                   />
                 </label>
-                <label className="flex items-center gap-2 self-end pb-2 text-sm">
-                  <input
-                    type="checkbox"
-                    className="size-4"
-                    checked={draft.active}
-                    onChange={(event) =>
-                      setDraft({ ...draft, active: event.target.checked })
-                    }
-                  />
-                  Lokasi aktif dipakai untuk absensi
-                </label>
               </div>
 
               <div className="flex flex-wrap gap-2">
@@ -420,28 +328,15 @@ export function LocationAdmin() {
                 <Button
                   variant="ghost"
                   disabled={busy}
-                  onClick={() => setDraft(null)}
+                  onClick={() => void load()}
                 >
-                  Batal
+                  Muat ulang
                 </Button>
               </div>
             </div>
-          ) : (
-            <div className="grid h-full min-h-72 place-items-center rounded-lg border border-dashed bg-card px-6 py-12 text-center">
-              <div>
-                <MapPin
-                  className="mx-auto size-7 text-muted-foreground"
-                  aria-hidden="true"
-                />
-                <p className="mt-3 text-sm text-muted-foreground">
-                  Pilih &quot;Ubah di peta&quot; pada salah satu lokasi, atau
-                  tambahkan lokasi baru untuk mulai mengatur radius.
-                </p>
-              </div>
-            </div>
-          )}
-        </section>
-      </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

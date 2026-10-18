@@ -5,7 +5,9 @@ import {
   attendanceRecords,
   companies,
   employees,
+  shifts,
   workLocations,
+  workSchedules,
 } from "@/db/schema";
 import type { AdminAttendanceListInput } from "@/validators/admin-attendance";
 
@@ -34,12 +36,18 @@ export async function listAnyAttendance(query: AdminAttendanceListInput) {
       checkInTime: attendanceRecords.checkInTime,
       checkOutTime: attendanceRecords.checkOutTime,
       status: attendanceRecords.status,
+      lateMinutes: attendanceRecords.lateMinutes,
+      notes: attendanceRecords.notes,
       checkInDistance: attendanceRecords.checkInDistance,
+      checkOutDistance: attendanceRecords.checkOutDistance,
       checkInPhotoId: attendanceRecords.checkInPhotoId,
       checkOutPhotoId: attendanceRecords.checkOutPhotoId,
       employeeName: employees.fullName,
       employeeNik: employees.nik,
       locationName: workLocations.name,
+      shiftName: shifts.name,
+      shiftStart: shifts.startTime,
+      shiftEnd: shifts.endTime,
     })
     .from(attendanceRecords)
     .innerJoin(employees, eq(employees.id, attendanceRecords.employeeId))
@@ -47,6 +55,11 @@ export async function listAnyAttendance(query: AdminAttendanceListInput) {
       workLocations,
       eq(workLocations.id, attendanceRecords.workLocationId),
     )
+    .leftJoin(
+      workSchedules,
+      eq(workSchedules.id, attendanceRecords.workScheduleId),
+    )
+    .leftJoin(shifts, eq(shifts.id, workSchedules.shiftId))
     .where(and(...conditions))
     .orderBy(asc(employees.fullName))
     .limit(query.limit + 1)

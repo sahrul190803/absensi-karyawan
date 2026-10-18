@@ -2,6 +2,7 @@ import {
   date,
   doublePrecision,
   index,
+  integer,
   pgTable,
   text,
   timestamp,
@@ -21,14 +22,20 @@ export const attendanceRecords = pgTable(
     employeeId: uuid("employee_id")
       .notNull()
       .references(() => employees.id, { onDelete: "cascade" }),
-    workScheduleId: uuid("work_schedule_id").references(() => workSchedules.id, {
-      onDelete: "set null",
-    }),
+    workScheduleId: uuid("work_schedule_id").references(
+      () => workSchedules.id,
+      {
+        onDelete: "set null",
+      },
+    ),
     // Nullable: absensi tanpa geofence (HOD, Marketing, HRD) mungkin tidak
     // punya lokasi kerja terjadwal.
-    workLocationId: uuid("work_location_id").references(() => workLocations.id, {
-      onDelete: "restrict",
-    }),
+    workLocationId: uuid("work_location_id").references(
+      () => workLocations.id,
+      {
+        onDelete: "restrict",
+      },
+    ),
     date: date("date").notNull(),
     checkInTime: timestamp("check_in_time", { withTimezone: true }),
     checkOutTime: timestamp("check_out_time", { withTimezone: true }),
@@ -46,8 +53,11 @@ export const attendanceRecords = pgTable(
       onDelete: "set null",
     }),
     checkInIdempotencyKey: varchar("check_in_idempotency_key", { length: 64 }),
-    checkOutIdempotencyKey: varchar("check_out_idempotency_key", { length: 64 }),
+    checkOutIdempotencyKey: varchar("check_out_idempotency_key", {
+      length: 64,
+    }),
     status: varchar("status", { length: 24 }).notNull(),
+    lateMinutes: integer("late_minutes").default(0).notNull(),
     notes: text("notes").default("").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()

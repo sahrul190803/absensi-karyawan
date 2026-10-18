@@ -1,6 +1,7 @@
 import {
   boolean,
   integer,
+  numeric,
   pgTable,
   timestamp,
   uuid,
@@ -19,7 +20,29 @@ export const companies = pgTable("companies", {
   defaultToleranceMinutes: integer("default_tolerance_minutes")
     .default(15)
     .notNull(),
-  // Tanggal gajian bulanan (1-28) yang ditandai di kalender HRD.
+  // Aturan potongan payroll: nominal denda per menit terlambat, nominal
+  // potongan per hari alpha, dan persentase potongan izin (setengah hari).
+  payrollLateRatePerMinute: numeric("payroll_late_rate_per_minute", {
+    precision: 12,
+    scale: 2,
+  })
+    .default("2000")
+    .notNull(),
+  payrollAlphaRatePerDay: numeric("payroll_alpha_rate_per_day", {
+    precision: 12,
+    scale: 2,
+  })
+    .default("100000")
+    .notNull(),
+  payrollPermissionPercent: integer("payroll_permission_percent")
+    .default(50)
+    .notNull(),
+  payrollLateDeductionPercent: integer("payroll_late_deduction_percent")
+    .default(10)
+    .notNull(),
+  payrollAlphaDeductionPercent: integer("payroll_alpha_deduction_percent")
+    .default(100)
+    .notNull(),
   payday: integer("payday").default(25).notNull(),
   // Verifikasi wajah (P3). Nonaktif secara default; hanya diberlakukan bila
   // provider face API sudah dikonfigurasi di server (fail-closed).

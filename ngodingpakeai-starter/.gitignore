@@ -22,3 +22,7 @@ coverage/
 .claude/settings.local.json
 .codex/config.local.toml
 .neon
+.vercel-token
+
+.vercel
+.env*

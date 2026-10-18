@@ -1,11 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { CsvImport } from "@/components/csv-import";
 import { MasterDataAdmin } from "@/components/master-data-admin";
 import { IzinCutiShell } from "../izin-cuti/izin-cuti-shell";
 import { AttendantView } from "./attendant-view";
-import { RecurringShiftAdmin } from "./recurring-shift-admin";
 import { ScheduleGrid } from "./schedule-grid";
 
 const TABS = [
@@ -14,7 +12,7 @@ const TABS = [
   { value: "view", label: "View" },
 ] as const;
 
-type TabValue = (typeof TABS)[number]["value"];
+export type TabValue = (typeof TABS)[number]["value"];
 
 // Jenis pengajuan yang ditinjau HOD/HRD: izin, sakit, cuti, dinas luar, tukar shift.
 const MANAGER_REQUEST_TYPES = [
@@ -25,8 +23,19 @@ const MANAGER_REQUEST_TYPES = [
   "shift_swap",
 ];
 
-export function AttendantShell() {
-  const [tab, setTab] = useState<TabValue>("create");
+export function AttendantShell({
+  initialTab = "create",
+}: {
+  initialTab?: TabValue;
+}) {
+  const [tab, setTab] = useState<TabValue>(initialTab);
+
+  const selectTab = (value: TabValue) => {
+    setTab(value);
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", value);
+    window.history.replaceState(null, "", url);
+  };
 
   return (
     <div className="space-y-5">
@@ -53,7 +62,7 @@ export function AttendantShell() {
               type="button"
               role="tab"
               aria-selected={active}
-              onClick={() => setTab(item.value)}
+              onClick={() => selectTab(item.value)}
               className={`rounded-md border px-4 py-1.5 text-sm font-medium transition-colors ${
                 active
                   ? "border-border-strong bg-primary-quiet text-foreground"
@@ -68,7 +77,7 @@ export function AttendantShell() {
 
       {tab === "create" ? (
         <div className="space-y-6">
-          <ScheduleGrid embedded />
+          <ScheduleGrid />
           <details className="rounded-lg border bg-card">
             <summary className="cursor-pointer px-5 py-4 text-sm font-semibold">
               Kelola shift (jam kerja, toleransi, lintas hari)
@@ -122,82 +131,6 @@ export function AttendantShell() {
                   {
                     key: "crossesMidnight",
                     label: "Melewati tengah malam",
-                    type: "boolean",
-                    defaultValue: false,
-                  },
-                  {
-                    key: "active",
-                    label: "Aktif",
-                    type: "boolean",
-                    defaultValue: true,
-                  },
-                ]}
-              />
-            </div>
-          </details>
-          <details className="rounded-lg border bg-card">
-            <summary className="cursor-pointer px-5 py-4 text-sm font-semibold">
-              Pola shift rutin mingguan (per karyawan)
-            </summary>
-            <div className="border-t border-border p-5">
-              <RecurringShiftAdmin />
-            </div>
-          </details>
-          <details className="rounded-lg border bg-card">
-            <summary className="cursor-pointer px-5 py-4 text-sm font-semibold">
-              Hari libur (kalender libur &amp; izin kerja)
-            </summary>
-            <div className="space-y-6 border-t border-border p-5">
-              <p className="text-sm text-muted-foreground">
-                Absensi otomatis ditolak pada hari libur yang aktif kecuali
-                &quot;kerja diizinkan&quot; menyala atau pengaturan perusahaan
-                mengizinkan absensi hari libur.
-              </p>
-              <CsvImport
-                endpoint="/api/holidays/import"
-                columns={[
-                  "date",
-                  "name",
-                  "type",
-                  "description",
-                  "allow_work",
-                  "active",
-                ]}
-              />
-              <MasterDataAdmin
-                title="Hari libur"
-                description="Kelola kalender libur nasional, cuti bersama, dan libur perusahaan."
-                endpoint="/api/holidays"
-                columns={[
-                  { key: "date", label: "Tanggal", format: "date" },
-                  { key: "name", label: "Nama" },
-                  {
-                    key: "type",
-                    label: "Jenis",
-                    valueLabels: {
-                      nasional: "Nasional",
-                      cuti_bersama: "Cuti bersama",
-                      perusahaan: "Perusahaan",
-                      khusus: "Khusus",
-                    },
-                  },
-                  { key: "allowWork", label: "Kerja diizinkan", format: "boolean" },
-                  { key: "active", label: "Aktif", format: "boolean" },
-                ]}
-                fields={[
-                  { key: "date", label: "Tanggal", type: "date", required: true },
-                  { key: "name", label: "Nama", type: "text", required: true },
-                  {
-                    key: "type",
-                    label: "Jenis",
-                    type: "select",
-                    required: true,
-                    options: ["nasional", "cuti_bersama", "perusahaan", "khusus"],
-                    defaultValue: "nasional",
-                  },
-                  {
-                    key: "allowWork",
-                    label: "Izinkan absensi (kerja hari libur)",
                     type: "boolean",
                     defaultValue: false,
                   },

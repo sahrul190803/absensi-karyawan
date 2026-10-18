@@ -29,4 +29,5 @@ export * from "./training-participant";
 export * from "./meal-claim";
 export * from "./payroll-period";
 export * from "./payroll-entry";
+export * from "./payroll-payment";
 export * from "./calendar-event";

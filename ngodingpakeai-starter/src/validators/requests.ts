@@ -53,6 +53,7 @@ export const requestListSchema = z
     offset: z.coerce.number().int().min(0).max(1_000_000).default(0),
     status: statusEnum.optional(),
     type: typeEnum.optional(),
+    positionId: z.string().uuid().optional(),
   })
   .strict();
 

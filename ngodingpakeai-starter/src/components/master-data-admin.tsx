@@ -1,6 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export type MasterFieldType =
@@ -27,9 +35,25 @@ export type MasterField = {
     // jabatan baru saat menambah karyawan).
     create?: { nameKey: string };
   };
+  // Pilihan berupa teks yang bisa diketik untuk mencari (mis. nama HOD).
+  searchable?: boolean;
   // Kirim null saat dikosongkan supaya pilihan opsional bisa dilepas kembali.
   nullable?: boolean;
   defaultValue?: string | number | boolean;
+};
+
+export type MasterFilter = {
+  key: string;
+  label: string;
+  optionsFrom?: NonNullable<MasterField["optionsFrom"]>;
+  options?: { value: string; label: string }[];
+};
+
+export type MasterApprove = {
+  key: string;
+  when: string;
+  value: string;
+  label: string;
 };
 
 export type MasterColumn = {
@@ -42,6 +66,144 @@ export type MasterColumn = {
 type Item = Record<string, unknown>;
 type Values = Record<string, string | number | boolean>;
 type Option = { value: string; label: string };
+
+// Combobox sederhana: ketik untuk menyaring, pilih dengan klik atau Enter.
+function SearchableSelect({
+  options,
+  value,
+  onChange,
+  placeholder,
+  nullable = false,
+}: {
+  options: Option[];
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  nullable?: boolean;
+}) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const listId = useId();
+
+  const selected = options.find((option) => option.value === value) ?? null;
+  const filtered = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return options;
+    return options.filter((option) =>
+      option.label.toLowerCase().includes(needle),
+    );
+  }, [options, query]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!wrapperRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+        setEditing(false);
+        setQuery("");
+      }
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [open]);
+
+  const choose = (next: string) => {
+    onChange(next);
+    setOpen(false);
+    setEditing(false);
+    setQuery("");
+  };
+
+  return (
+    <div ref={wrapperRef} className="relative">
+      <input
+        type="text"
+        role="combobox"
+        aria-expanded={open}
+        aria-controls={listId}
+        aria-autocomplete="list"
+        className="h-10 w-full rounded-md border border-border bg-card px-3 pr-9 text-sm"
+        value={editing ? query : (selected?.label ?? "")}
+        placeholder={placeholder ?? "Ketik untuk mencari..."}
+        onFocus={() => {
+          setOpen(true);
+          setEditing(true);
+          setQuery("");
+        }}
+        onChange={(event) => {
+          setQuery(event.target.value);
+          setOpen(true);
+          setEditing(true);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            setOpen(false);
+            setEditing(false);
+            setQuery("");
+          }
+          if (event.key === "Enter" && open && filtered.length === 1) {
+            event.preventDefault();
+            choose(filtered[0].value);
+          }
+        }}
+      />
+      {nullable && value && (
+        <button
+          type="button"
+          aria-label="Kosongkan pilihan"
+          className="absolute top-1/2 right-2 grid size-6 -translate-y-1/2 place-items-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+          onClick={() => choose("")}
+        >
+          ×
+        </button>
+      )}
+      {open && (
+        <ul
+          id={listId}
+          role="listbox"
+          className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border border-border bg-card py-1 shadow-lg"
+        >
+          {nullable && (
+            <li>
+              <button
+                type="button"
+                role="option"
+                aria-selected={!value}
+                className="w-full px-3 py-2 text-left text-sm text-muted-foreground hover:bg-muted"
+                onClick={() => choose("")}
+              >
+                Tidak ada
+              </button>
+            </li>
+          )}
+          {filtered.length === 0 ? (
+            <li className="px-3 py-2 text-sm text-muted-foreground">
+              Tidak ada yang cocok.
+            </li>
+          ) : (
+            filtered.map((option) => (
+              <li key={option.value}>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={option.value === value}
+                  className={`w-full px-3 py-2 text-left text-sm hover:bg-muted ${
+                    option.value === value ? "bg-primary-quiet" : ""
+                  }`}
+                  onClick={() => choose(option.value)}
+                >
+                  {option.label}
+                </button>
+              </li>
+            ))
+          )}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 const formatDate = (value: unknown) => {
   const text = String(value);
@@ -60,12 +222,20 @@ export function MasterDataAdmin({
   endpoint,
   columns,
   fields,
+  filters = [],
+  approve,
+  canCreate = true,
+  canDelete = true,
 }: {
   title: string;
   description: string;
   endpoint: string;
   columns: MasterColumn[];
   fields: MasterField[];
+  filters?: MasterFilter[];
+  approve?: MasterApprove;
+  canCreate?: boolean;
+  canDelete?: boolean;
 }) {
   const [items, setItems] = useState<Item[]>([]);
   const [optionMaps, setOptionMaps] = useState<Record<string, Option[]>>({});
@@ -79,6 +249,8 @@ export function MasterDataAdmin({
   const [values, setValues] = useState<Values>({});
   const [newOptions, setNewOptions] = useState<Record<string, string>>({});
   const [query, setQuery] = useState("");
+  const [filterValues, setFilterValues] = useState<Record<string, string>>({});
+  const formRef = useRef<HTMLElement | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -105,11 +277,12 @@ export function MasterDataAdmin({
   }, [load]);
 
   useEffect(() => {
-    const sources = fields
-      .map((field) => field.optionsFrom)
-      .filter((source): source is NonNullable<MasterField["optionsFrom"]> =>
-        Boolean(source),
-      );
+    const sources = [
+      ...fields.map((field) => field.optionsFrom),
+      ...filters.map((filter) => filter.optionsFrom),
+    ].filter((source): source is NonNullable<MasterField["optionsFrom"]> =>
+      Boolean(source),
+    );
     const unique = Array.from(
       new Map(sources.map((source) => [source.endpoint, source])).values(),
     );
@@ -138,7 +311,7 @@ export function MasterDataAdmin({
       setOptionMaps(Object.fromEntries(entries));
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [fields]);
+  }, [fields, filters]);
 
   const defaultValues = useCallback((): Values => {
     const next: Values = {};
@@ -150,12 +323,24 @@ export function MasterDataAdmin({
     return next;
   }, [fields]);
 
+  const revealForm = useCallback(() => {
+    window.requestAnimationFrame(() => {
+      const form = formRef.current;
+      if (!form) return;
+      form.scrollIntoView({ behavior: "smooth", block: "start" });
+      form
+        .querySelector<HTMLElement>("input, select, textarea")
+        ?.focus({ preventScroll: true });
+    });
+  }, []);
+
   const openCreate = () => {
     setEditingId(null);
     setValues(defaultValues());
     setNewOptions({});
     setFormOpen(true);
     setNotice(null);
+    revealForm();
   };
 
   const openEdit = (item: Item) => {
@@ -171,6 +356,7 @@ export function MasterDataAdmin({
     setNewOptions({});
     setFormOpen(true);
     setNotice(null);
+    revealForm();
   };
 
   // Buat opsi baru (departemen/jabatan) langsung dari form, lalu pakai id-nya.
@@ -300,6 +486,33 @@ export function MasterDataAdmin({
     [endpoint, load],
   );
 
+  const approveItem = useCallback(
+    async (item: Item) => {
+      if (!approve) return;
+      setBusy(true);
+      setError(null);
+      try {
+        const response = await fetch(`${endpoint}/${String(item.id)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ [approve.key]: approve.value }),
+        });
+        const body = await response.json();
+        if (!response.ok) {
+          setError(body?.error?.message ?? "Data gagal diverifikasi.");
+          return;
+        }
+        setNotice(`${String(item.fullName ?? item.name ?? "Data")} diverifikasi.`);
+        await load();
+      } catch {
+        setError("Jaringan bermasalah. Coba lagi.");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [approve, endpoint, load],
+  );
+
   const displayValue = (item: Item, column: MasterColumn) => {
     const raw = item[column.key];
     if (raw === null || raw === undefined || raw === "") return "—";
@@ -317,11 +530,21 @@ export function MasterDataAdmin({
     return String(raw);
   };
 
-  const visible = query
-    ? items.filter((item) =>
-        JSON.stringify(item).toLowerCase().includes(query.toLowerCase()),
-      )
-    : items;
+  const activeFilters = filters.filter(
+    (filter) => filterValues[filter.key],
+  );
+
+  const visible = items.filter((item) => {
+    const needle = query.trim().toLowerCase();
+    const matchesQuery =
+      !needle || JSON.stringify(item).toLowerCase().includes(needle);
+    const matchesFilters = filters.every(
+      (filter) =>
+        !filterValues[filter.key] ||
+        String(item[filter.key] ?? "") === filterValues[filter.key],
+    );
+    return matchesQuery && matchesFilters;
+  });
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -332,9 +555,11 @@ export function MasterDataAdmin({
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">{description}</p>
         </div>
-        <Button size="sm" onClick={openCreate}>
-          Tambah
-        </Button>
+        {canCreate && (
+          <Button size="sm" onClick={openCreate}>
+            Tambah
+          </Button>
+        )}
       </div>
 
       {notice && (
@@ -352,7 +577,10 @@ export function MasterDataAdmin({
       )}
 
       {formOpen && (
-        <section className="mt-6 rounded-lg border bg-card p-5">
+        <section
+          ref={formRef}
+          className="mt-6 scroll-mt-24 rounded-lg border bg-card p-5"
+        >
           <h2 className="text-lg font-semibold">
             {editingId ? "Ubah data" : "Tambah data"}
           </h2>
@@ -374,6 +602,26 @@ export function MasterDataAdmin({
                         [field.key]: event.target.checked,
                       }))
                     }
+                  />
+                ) : field.type === "select" && field.searchable ? (
+                  <SearchableSelect
+                    options={
+                      field.optionsFrom
+                        ? (optionMaps[field.optionsFrom.endpoint] ?? [])
+                        : (field.options ?? []).map((option) => ({
+                            value: option,
+                            label: option,
+                          }))
+                    }
+                    value={String(values[field.key] ?? "")}
+                    onChange={(next) =>
+                      setValues((prev) => ({
+                        ...prev,
+                        [field.key]: next,
+                      }))
+                    }
+                    placeholder={`Cari ${field.label.toLowerCase()}...`}
+                    nullable={field.nullable}
                   />
                 ) : field.type === "select" ? (
                   <>
@@ -463,14 +711,57 @@ export function MasterDataAdmin({
         </section>
       )}
 
-      <input
-        type="search"
-        placeholder="Cari…"
-        aria-label={`Cari ${title}`}
-        className="mt-6 h-10 w-full rounded-md border border-border bg-card px-3 text-sm"
-        value={query}
-        onChange={(event) => setQuery(event.target.value)}
-      />
+      <div className="mt-6 space-y-3">
+        {filters.length > 0 && (
+          <div className="flex flex-wrap items-end gap-2">
+            {filters.map((filter) => (
+              <label
+                key={filter.key}
+                className="flex items-center gap-2 text-sm text-muted-foreground"
+              >
+                {filter.label}
+                <select
+                  className="h-9 rounded-md border border-border bg-card px-2 text-sm text-foreground"
+                  value={filterValues[filter.key] ?? ""}
+                  onChange={(event) =>
+                    setFilterValues((previous) => ({
+                      ...previous,
+                      [filter.key]: event.target.value,
+                    }))
+                  }
+                >
+                  <option value="">Semua {filter.label.toLowerCase()}</option>
+                  {(filter.optionsFrom
+                    ? (optionMaps[filter.optionsFrom.endpoint] ?? [])
+                    : (filter.options ?? [])
+                  ).map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ))}
+            {activeFilters.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setFilterValues({})}
+              >
+                Reset filter
+              </Button>
+            )}
+          </div>
+        )}
+        <input
+          type="search"
+          placeholder="Cari..."
+          aria-label={`Cari ${title}`}
+          className="h-10 w-full rounded-md border border-border bg-card px-3 text-sm"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+      </div>
 
       {loading ? (
         <p className="mt-4 text-sm text-muted-foreground">Memuat…</p>
@@ -517,7 +808,17 @@ export function MasterDataAdmin({
                     </div>
                   ))}
                 </dl>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
+                  {approve && String(item[approve.key] ?? "") === approve.when && (
+                    <Button
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => void approveItem(item)}
+                    >
+                      <Check aria-hidden="true" />
+                      {approve.label}
+                    </Button>
+                  )}
                   <Button
                     variant="outline"
                     size="sm"
@@ -526,14 +827,16 @@ export function MasterDataAdmin({
                   >
                     Ubah
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={busy}
-                    onClick={() => void remove(item)}
-                  >
-                    Hapus
-                  </Button>
+                  {canDelete && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => void remove(item)}
+                    >
+                      Hapus
+                    </Button>
+                  )}
                 </div>
               </div>
             </li>

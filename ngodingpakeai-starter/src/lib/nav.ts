@@ -18,12 +18,10 @@ export type NavIcon =
   | "settings"
   | "map-pin"
   | "shield"
-  | "smartphone"
   | "folder"
   | "building"
   | "briefcase"
-  | "clock"
-  | "calendar-off";
+  | "clock";
 
 export type NavItem = {
   href: string;
@@ -106,8 +104,15 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/admin/karyawan",
     label: "Data Karyawan",
     icon: "users",
-    roles: ADMIN_ROLES_NAV,
+    roles: MANAGER_ROLES,
     group: "karyawan",
+  },
+  {
+    href: "/admin/notifikasi",
+    label: "Notifikasi",
+    icon: "bell",
+    roles: MANAGER_ROLES,
+    group: "operasional",
   },
   {
     href: "/admin/laporan",
@@ -141,20 +146,6 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/admin/lokasi",
     label: "Lokasi & Radius",
     icon: "map-pin",
-    roles: ADMIN_ROLES_NAV,
-    group: "pengaturan",
-  },
-  {
-    href: "/admin/perangkat",
-    label: "Perangkat",
-    icon: "smartphone",
-    roles: ADMIN_ROLES_NAV,
-    group: "pengaturan",
-  },
-  {
-    href: "/admin/audit",
-    label: "Audit Log",
-    icon: "shield",
     roles: ADMIN_ROLES_NAV,
     group: "pengaturan",
   },

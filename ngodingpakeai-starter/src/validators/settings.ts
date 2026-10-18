@@ -7,11 +7,24 @@ export const updateSettingsSchema = z
     allowHolidayWork: z.boolean().optional(),
     gpsAccuracyLimitM: z.coerce.number().int().min(5).max(2000).optional(),
     defaultRadiusM: z.coerce.number().int().min(10).max(5000).optional(),
-    defaultToleranceMinutes: z.coerce
+    defaultToleranceMinutes: z.coerce.number().int().min(0).max(120).optional(),
+    payrollLateRatePerMinute: z.coerce
+      .number()
+      .min(0)
+      .max(1_000_000_000)
+      .transform((value) => value.toFixed(2))
+      .optional(),
+    payrollAlphaRatePerDay: z.coerce
+      .number()
+      .min(0)
+      .max(1_000_000_000)
+      .transform((value) => value.toFixed(2))
+      .optional(),
+    payrollPermissionPercent: z.coerce
       .number()
       .int()
       .min(0)
-      .max(120)
+      .max(100)
       .optional(),
     payday: z.coerce.number().int().min(1).max(28).optional(),
     faceVerificationEnabled: z.boolean().optional(),

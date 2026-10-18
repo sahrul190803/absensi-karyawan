@@ -13,12 +13,21 @@ export const createEmployeeSchema = z
     positionId: z.string().uuid().nullish(),
     workLocationId: z.string().uuid().nullish(),
     joinDate: dateOnly.nullish(),
-    employmentStatus: z.enum(["active", "inactive", "resigned"]).default("active"),
+    employmentStatus: z
+      .enum(["pending", "active", "inactive", "resigned"])
+      .default("active"),
     bankName: z.string().trim().max(80).default(""),
     bankAccount: z.string().trim().max(40).default(""),
+    bankAccountName: z.string().trim().max(120).default(""),
     ktpNumber: z.string().trim().max(32).default(""),
     salaryType: z.enum(["monthly", "daily"]).default("monthly"),
     baseSalary: z
+      .number()
+      .min(0)
+      .max(1_000_000_000)
+      .transform((value) => value.toFixed(2))
+      .default("0"),
+    allowance: z
       .number()
       .min(0)
       .max(1_000_000_000)
@@ -30,7 +39,10 @@ export const createEmployeeSchema = z
 export const updateEmployeeSchema = createEmployeeSchema
   .partial()
   .strict()
-  .refine((value) => Object.keys(value).length > 0, "Provide a field to update.");
+  .refine(
+    (value) => Object.keys(value).length > 0,
+    "Provide a field to update.",
+  );
 
 export type CreateEmployeeInput = z.infer<typeof createEmployeeSchema>;
 export type UpdateEmployeeInput = z.infer<typeof updateEmployeeSchema>;

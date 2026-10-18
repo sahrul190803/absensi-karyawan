@@ -18,15 +18,21 @@ export function GET(request: Request) {
 }
 
 export function POST(request: Request) {
-  return withApiPermission(request, { payroll: ["create"] }, async (session) => {
-    const input = generatePayrollSchema.parse(await readJson(request));
-    const result = await generateAnyPayrollPeriod(session.user.id, input);
-    return Response.json(
-      { data: result },
-      {
-        status: 201,
-        headers: { Location: `/api/admin/payroll/periods/${result.period.id}` },
-      },
-    );
-  });
+  return withApiPermission(
+    request,
+    { payroll: ["create"] },
+    async (session) => {
+      const input = generatePayrollSchema.parse(await readJson(request));
+      const result = await generateAnyPayrollPeriod(session.user.id, input);
+      return Response.json(
+        { data: result },
+        {
+          status: 201,
+          headers: {
+            Location: `/api/admin/payroll/periods/${result.period.id}`,
+          },
+        },
+      );
+    },
+  );
 }

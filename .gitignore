@@ -1,1 +1,5 @@
 *.log
+.vercel/
+.vercel-token
+.vercel
+.env*

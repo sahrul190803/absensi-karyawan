@@ -17,10 +17,14 @@ export function GET(request: Request, context: Context) {
 }
 
 export function PATCH(request: Request, context: Context) {
-  return withApiPermission(request, { payroll: ["update"] }, async (session) => {
-    const id = idSchema.parse((await context.params).id);
-    const input = updatePayrollPeriodSchema.parse(await readJson(request));
-    const data = await updateAnyPayrollPeriod(session.user.id, id, input);
-    return Response.json({ data });
-  });
+  return withApiPermission(
+    request,
+    { payroll: ["update"] },
+    async (session) => {
+      const id = idSchema.parse((await context.params).id);
+      const input = updatePayrollPeriodSchema.parse(await readJson(request));
+      const data = await updateAnyPayrollPeriod(session.user.id, id, input);
+      return Response.json({ data });
+    },
+  );
 }

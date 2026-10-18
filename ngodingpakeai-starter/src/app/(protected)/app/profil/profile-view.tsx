@@ -289,9 +289,7 @@ export function ProfileView({
       setKtpData(null);
       setPhotoName("");
       setKtpName("");
-      setProfileNotice(
-        "Data diri tersimpan. HRD dapat melihat pembaruan ini.",
-      );
+      setProfileNotice("Data diri tersimpan. HRD dapat melihat pembaruan ini.");
     } catch {
       setProfileError("Tidak dapat menghubungi server.");
     } finally {
@@ -431,7 +429,6 @@ export function ProfileView({
         { label: "No. KTP", value: profile.ktpNumber || "—" },
         { label: "Departemen", value: profile.departmentName ?? "—" },
         { label: "Jabatan", value: profile.positionName ?? "—" },
-        { label: "Lokasi kerja", value: profile.locationName ?? "—" },
         { label: "Bergabung", value: formatDate(profile.joinDate) },
         {
           label: "Status",
@@ -563,7 +560,10 @@ export function ProfileView({
                     className="h-10 w-full rounded-md border border-border bg-card px-3 text-sm"
                     value={profileForm.phone}
                     onChange={(event) =>
-                      setProfileForm({ ...profileForm, phone: event.target.value })
+                      setProfileForm({
+                        ...profileForm,
+                        phone: event.target.value,
+                      })
                     }
                   />
                 </label>

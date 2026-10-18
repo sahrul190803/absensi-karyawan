@@ -7,7 +7,11 @@ import { Bell } from "lucide-react";
 
 // Ikon lonceng dengan badge jumlah notifikasi belum dibaca. Data diambil
 // ulang setiap pindah halaman; badge hanya pelengkap, kegagalan diabaikan.
-export function NotificationBell() {
+export function NotificationBell({
+  href = "/app/notifikasi",
+}: {
+  href?: string;
+}) {
   const pathname = usePathname();
   const [unread, setUnread] = useState(0);
 
@@ -33,7 +37,7 @@ export function NotificationBell() {
 
   return (
     <Link
-      href="/app/notifikasi"
+      href={href}
       className="relative grid size-9 place-items-center rounded-md border border-border bg-card text-muted-foreground"
       aria-label={
         unread > 0 ? `Notifikasi, ${unread} belum dibaca` : "Notifikasi"

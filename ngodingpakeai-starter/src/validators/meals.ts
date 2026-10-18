@@ -14,6 +14,8 @@ export const mealQuerySchema = z
     from: dateOnly.optional(),
     to: dateOnly.optional(),
     departmentId: z.string().uuid().optional(),
+    positionId: z.string().uuid().optional(),
+    session: z.enum(["pagi", "siang", "malam"]).optional(),
     limit: z.coerce.number().int().min(1).max(200).default(100),
     offset: z.coerce.number().int().min(0).max(1_000_000).default(0),
   })

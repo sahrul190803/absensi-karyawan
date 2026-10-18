@@ -26,13 +26,27 @@ type Totals = {
   lemburJam: number;
 };
 
+type Position = { id: string; name: string };
+
 const currentMonth = () => {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 };
 
+const currentDate = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+};
+
+type ReportPeriod = "day" | "month" | "year";
+
 export function ReportView() {
+  const [period, setPeriod] = useState<ReportPeriod>("month");
+  const [day, setDay] = useState(currentDate());
   const [month, setMonth] = useState(currentMonth());
+  const [year, setYear] = useState(String(new Date().getFullYear()));
+  const [positionId, setPositionId] = useState("");
+  const [positions, setPositions] = useState<Position[]>([]);
   const [rows, setRows] = useState<ReportRow[]>([]);
   const [totals, setTotals] = useState<Totals>({
     hadir: 0,
@@ -47,11 +61,24 @@ export function ReportView() {
   const [sending, setSending] = useState<string | null>(null);
   const [noteError, setNoteError] = useState<string | null>(null);
 
-  const load = useCallback(async (nextMonth: string) => {
+  const queryParams = useCallback(
+    (format?: "csv" | "xls" | "pdf") => {
+      const params = new URLSearchParams({ period });
+      if (period === "day") params.set("date", day);
+      if (period === "month") params.set("month", month);
+      if (period === "year") params.set("year", year);
+      if (positionId) params.set("positionId", positionId);
+      if (format) params.set("format", format);
+      return params;
+    },
+    [day, month, period, positionId, year],
+  );
+
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const response = await fetch(
-        `/api/admin/reports/attendance?month=${nextMonth}`,
+        `/api/admin/reports/attendance?${queryParams()}`,
         { cache: "no-store" },
       );
       const body = await response.json();
@@ -75,15 +102,33 @@ export function ReportView() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [queryParams]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => void load(currentMonth()), 0);
+    const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
   }, [load]);
 
+  useEffect(() => {
+    const timer = window.setTimeout(async () => {
+      try {
+        const response = await fetch("/api/positions?limit=200", {
+          cache: "no-store",
+        });
+        const body = await response.json();
+        if (response.ok) setPositions(body.data ?? []);
+      } catch {
+        // Filter jabatan opsional; laporan tetap bisa dimuat tanpa daftar ini.
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
   const exportUrl = (format: "csv" | "xls" | "pdf") =>
-    `/api/admin/reports/attendance/export?month=${month}&format=${format}`;
+    `/api/admin/reports/attendance/export?${queryParams(format)}`;
+
+  const periodLabel =
+    period === "day" ? day : period === "year" ? year : monthLabel(month);
 
   const presencePercent = (row: ReportRow) => {
     const total = row.hadir + row.terlambat + row.pulangCepat + row.alpha;
@@ -114,10 +159,7 @@ export function ReportView() {
 
   const watchList = sortedRows
     .filter((row) => row.alpha > 0 || row.terlambat >= 2)
-    .sort(
-      (a, b) =>
-        b.alpha * 2 + b.terlambat - (a.alpha * 2 + a.terlambat),
-    )
+    .sort((a, b) => b.alpha * 2 + b.terlambat - (a.alpha * 2 + a.terlambat))
     .slice(0, 3);
 
   const stats = [
@@ -165,22 +207,80 @@ export function ReportView() {
             Laporan Kehadiran
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Rekap bulanan per karyawan · periode {monthLabel(month)} · hari
-            libur tidak dihitung alpha
+            Rekap{" "}
+            {period === "day"
+              ? "harian"
+              : period === "year"
+                ? "tahunan"
+                : "bulanan"}{" "}
+            per karyawan · periode {periodLabel} · hari libur tidak dihitung
+            alpha
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-2">
           <label className="grid gap-1 text-xs">
-            <span className="font-medium text-muted-foreground">Bulan</span>
-            <input
-              type="month"
-              className="h-10 rounded-md border border-border bg-card px-3 text-sm"
-              value={month}
-              onChange={(event) => {
-                setMonth(event.target.value);
-                if (event.target.value) void load(event.target.value);
-              }}
-            />
+            <span className="font-medium text-muted-foreground">
+              Jenis laporan
+            </span>
+            <select
+              className="h-10 rounded-md border border-border bg-card px-2 text-sm text-foreground"
+              value={period}
+              onChange={(event) =>
+                setPeriod(event.target.value as ReportPeriod)
+              }
+            >
+              <option value="day">Harian</option>
+              <option value="month">Bulanan</option>
+              <option value="year">Tahunan</option>
+            </select>
+          </label>
+          <label className="grid gap-1 text-xs">
+            <span className="font-medium text-muted-foreground">
+              {period === "day"
+                ? "Tanggal"
+                : period === "year"
+                  ? "Tahun"
+                  : "Bulan"}
+            </span>
+            {period === "day" ? (
+              <input
+                type="date"
+                className="h-10 rounded-md border border-border bg-card px-3 text-sm"
+                value={day}
+                onChange={(event) => setDay(event.target.value)}
+              />
+            ) : period === "year" ? (
+              <input
+                type="number"
+                min={2000}
+                max={2100}
+                className="h-10 rounded-md border border-border bg-card px-3 text-sm"
+                value={year}
+                onChange={(event) => setYear(event.target.value)}
+              />
+            ) : (
+              <input
+                type="month"
+                className="h-10 rounded-md border border-border bg-card px-3 text-sm"
+                value={month}
+                onChange={(event) => setMonth(event.target.value)}
+              />
+            )}
+          </label>
+          <label className="grid gap-1 text-xs">
+            <span className="font-medium text-muted-foreground">Jabatan</span>
+            <select
+              className="h-10 rounded-md border border-border bg-card px-2 text-sm text-foreground"
+              value={positionId}
+              onChange={(event) => setPositionId(event.target.value)}
+            >
+              <option value="">Semua jabatan</option>
+              {positions.map((position) => (
+                <option key={position.id} value={position.id}>
+                  {position.name}
+                </option>
+              ))}
+            </select>
           </label>
           {(
             [
@@ -197,7 +297,7 @@ export function ReportView() {
               onClick={() => {
                 const link = document.createElement("a");
                 link.href = exportUrl(format);
-                link.download = `rekap-${month}.${format}`;
+                link.download = `rekap-${periodLabel}.${format}`;
                 link.click();
               }}
             >
@@ -242,7 +342,7 @@ export function ReportView() {
             <section className="rounded-lg border bg-card p-5">
               <h2 className="font-semibold">Komposisi kehadiran</h2>
               <p className="mt-0.5 text-sm text-muted-foreground">
-                Total catatan absensi {monthLabel(month)}
+                Total catatan absensi {periodLabel}
               </p>
               <DonutChart
                 className="mt-5"
@@ -259,7 +359,7 @@ export function ReportView() {
                 </span>
               </div>
               <p className="mt-0.5 text-sm text-muted-foreground">
-                Dihitung sistem dari data absensi {monthLabel(month)}
+                Dihitung sistem dari data absensi {periodLabel}
               </p>
               {topPerformers.length === 0 ? (
                 <p className="mt-4 text-sm text-muted-foreground">
@@ -309,7 +409,7 @@ export function ReportView() {
                 Evaluasi &amp; apresiasi
               </h2>
               <p className="mt-0.5 text-sm text-muted-foreground">
-                Berdasarkan rekap absensi {monthLabel(month)} — HRD bisa memberi
+                Berdasarkan rekap absensi {periodLabel} — HRD bisa memberi
                 ucapan atau peringatan.
               </p>
               {noteError && (
@@ -420,8 +520,8 @@ export function ReportView() {
               </article>
             </div>
             <p className="text-xs leading-5 text-muted-foreground">
-              Ucapan &amp; peringatan dikirim sebagai notifikasi in-app +
-              email ke karyawan dan tercatat di audit log.
+              Ucapan &amp; peringatan dikirim sebagai notifikasi in-app dan
+              email ke karyawan.
             </p>
           </section>
 

@@ -1,10 +1,20 @@
 import type { Metadata } from "next";
 import { requirePermission } from "@/lib/session";
-import { AttendantShell } from "./attendant-shell";
+import { AttendantShell, type TabValue } from "./attendant-shell";
 
 export const metadata: Metadata = { title: "Attendant" };
 
-export default async function AdminJadwalPage() {
+const TAB_VALUES: TabValue[] = ["create", "request", "view"];
+
+export default async function AdminJadwalPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string | string[] }>;
+}) {
   await requirePermission({ schedules: ["read-any"] });
-  return <AttendantShell />;
+  const { tab } = await searchParams;
+  const requested = Array.isArray(tab) ? tab[0] : tab;
+  const initialTab =
+    TAB_VALUES.find((value) => value === requested) ?? "create";
+  return <AttendantShell initialTab={initialTab} />;
 }

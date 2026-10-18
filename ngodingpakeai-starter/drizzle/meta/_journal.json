@@ -134,6 +134,20 @@
       "when": 1792185019330,
       "tag": "0018_next_cargill",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1792275079394,
+      "tag": "0019_certain_doctor_spectrum",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1792278024590,
+      "tag": "0020_dapper_adam_warlock",
+      "breakpoints": true
     }
   ]
 }

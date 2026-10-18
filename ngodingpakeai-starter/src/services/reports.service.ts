@@ -36,15 +36,45 @@ const overtimeHours = (startTime: string | null, endTime: string | null) => {
 
 export async function getAttendanceReport(query: ReportQueryInput) {
   const now = new Date();
-  const month =
-    query.month ??
-    `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const from = `${month}-01`;
-  const to = `${month}-31`;
+  const pad = (value: number) => String(value).padStart(2, "0");
+  const period =
+    query.period ?? (query.date ? "day" : query.year ? "year" : "month");
+
+  let from: string;
+  let to: string;
+  let label: string;
+
+  if (period === "day") {
+    const date =
+      query.date ??
+      new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Jakarta",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(now);
+    from = date;
+    to = date;
+    label = date;
+  } else if (period === "year") {
+    const year = query.year ?? now.getFullYear();
+    from = `${year}-01-01`;
+    to = `${year}-12-31`;
+    label = String(year);
+  } else {
+    const month =
+      query.month ?? `${now.getFullYear()}-${pad(now.getMonth() + 1)}`;
+    from = `${month}-01`;
+    to = `${month}-31`;
+    label = month;
+  }
 
   const employeeConditions: SQL[] = [];
   if (query.departmentId) {
     employeeConditions.push(eq(employees.departmentId, query.departmentId));
+  }
+  if (query.positionId) {
+    employeeConditions.push(eq(employees.positionId, query.positionId));
   }
 
   const staff = await db
@@ -134,5 +164,5 @@ export async function getAttendanceReport(query: ReportQueryInput) {
     emptyBucket(),
   );
 
-  return { data, meta: { month, from, to, totals } };
+  return { data, meta: { period, label, from, to, totals } };
 }

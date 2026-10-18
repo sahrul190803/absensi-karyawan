@@ -11,6 +11,7 @@ type ScheduleRow = {
   employeeId: string;
   employeeName: string;
   date: string;
+  shiftId: string;
   shiftName: string;
   startTime: string;
   endTime: string;
@@ -128,21 +129,30 @@ export function AttendantView() {
   );
 
   const grouped = useMemo(() => {
-    const map = new Map<string, ScheduleRow[]>();
+    const map = new Map<string, Map<string, ScheduleRow[]>>();
     for (const row of filteredRows) {
-      const list = map.get(row.date) ?? [];
+      const shiftKey = row.shiftId || row.shiftName;
+      const day = map.get(row.date) ?? new Map<string, ScheduleRow[]>();
+      const list = day.get(shiftKey) ?? [];
       list.push(row);
-      map.set(row.date, list);
+      day.set(shiftKey, list);
+      map.set(row.date, day);
     }
     return [...map.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([date, items]) => ({
+      .map(([date, shiftMap]) => ({
         date,
-        items: items.sort(
-          (a, b) =>
-            a.startTime.localeCompare(b.startTime) ||
-            a.employeeName.localeCompare(b.employeeName),
-        ),
+        shifts: [...shiftMap.entries()]
+          .map(([shiftId, items]) => ({
+            shiftId,
+            shiftName: items[0].shiftName,
+            startTime: items[0].startTime,
+            endTime: items[0].endTime,
+            items: items.sort((a, b) =>
+              a.employeeName.localeCompare(b.employeeName),
+            ),
+          }))
+          .sort((a, b) => a.startTime.localeCompare(b.startTime)),
       }));
   }, [filteredRows]);
 
@@ -255,28 +265,42 @@ export function AttendantView() {
                       })}
                     </span>
                   </p>
-                  <ul className="mt-2 divide-y divide-border rounded-md border border-border">
-                    {group.items.map((row) => (
-                      <li
-                        key={row.id}
-                        className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
+                  <div className="mt-2 space-y-3">
+                    {group.shifts.map((shift) => (
+                      <div
+                        key={shift.shiftId}
+                        className="overflow-hidden rounded-md border border-border"
                       >
-                        <span className="font-medium">{row.employeeName}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {row.locationName}
-                        </span>
-                        <span className="flex items-center gap-2 text-xs">
-                          <span className="rounded-full border border-border px-2 py-0.5 font-semibold">
-                            {row.shiftName}
+                        <header className="flex flex-wrap items-center gap-2 border-b border-border bg-muted px-3 py-2">
+                          <span className="text-sm font-semibold">
+                            {shift.shiftName}
                           </span>
-                          <span className="font-mono text-muted-foreground">
-                            {row.startTime.slice(0, 5)}–
-                            {row.endTime.slice(0, 5)}
+                          <span className="font-mono text-xs text-muted-foreground">
+                            {shift.startTime.slice(0, 5)}-
+                            {shift.endTime.slice(0, 5)}
                           </span>
-                        </span>
-                      </li>
+                          <span className="ml-auto font-mono text-xs text-muted-foreground">
+                            {shift.items.length} orang
+                          </span>
+                        </header>
+                        <ul className="divide-y divide-border">
+                          {shift.items.map((row) => (
+                            <li
+                              key={row.id}
+                              className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
+                            >
+                              <span className="font-medium">
+                                {row.employeeName}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                {row.locationName}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
                     ))}
-                  </ul>
+                  </div>
                 </div>
               ))}
             </div>

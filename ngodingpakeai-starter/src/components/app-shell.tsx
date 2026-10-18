@@ -9,7 +9,6 @@ import {
   Briefcase,
   Building2,
   CalendarDays,
-  CalendarOff,
   CalendarRange,
   Clock,
   FileClock,
@@ -24,7 +23,6 @@ import {
   Menu,
   Settings,
   ShieldCheck,
-  Smartphone,
   User,
   Users,
   UtensilsCrossed,
@@ -62,12 +60,10 @@ const ICONS: Record<NavIcon, LucideIcon> = {
   settings: Settings,
   "map-pin": MapPin,
   shield: ShieldCheck,
-  smartphone: Smartphone,
   folder: FolderKanban,
   building: Building2,
   briefcase: Briefcase,
   clock: Clock,
-  "calendar-off": CalendarOff,
 };
 
 const MANAGER_MOBILE_TABS = [
@@ -185,11 +181,13 @@ export function AppShell({
   user,
   roleLabel,
   items,
+  managerMode = false,
   children,
 }: {
   user: { name: string; email: string };
   roleLabel: string;
   items: NavItem[];
+  managerMode?: boolean;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -204,9 +202,9 @@ export function AppShell({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [menuOpen]);
 
-  const managerMode = items.some((item) => item.href === "/admin");
-  // Hanya akun dengan area karyawan yang punya halaman notifikasi.
-  const showNotifications = items.some((item) => item.href === "/app");
+  // Admin dan karyawan sama-sama punya pusat notifikasi.
+  const showNotifications =
+    managerMode || items.some((item) => item.href === "/app");
   const tabHrefs = managerMode ? MANAGER_MOBILE_TABS : MOBILE_TAB_HREFS;
   const tabItems = tabHrefs
     .map((href) => items.find((item) => item.href === href))
@@ -243,7 +241,11 @@ export function AppShell({
         <Brand className="min-w-0 [&>span:last-child>span:last-child]:hidden" />
         <span className="flex items-center gap-2">
           <ThemeToggle />
-          {showNotifications && <NotificationBell />}
+          {showNotifications && (
+            <NotificationBell
+              href={managerMode ? "/admin/notifikasi" : "/app/notifikasi"}
+            />
+          )}
         </span>
       </header>
 

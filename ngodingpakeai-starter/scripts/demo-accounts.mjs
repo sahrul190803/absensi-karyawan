@@ -97,7 +97,7 @@ const sleep = (ms) => new Promise((accept) => setTimeout(accept, ms));
 const signUp = async (account) => {
   const response = await fetch(`${baseUrl}/api/auth/sign-up/email`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", origin: baseUrl },
     body: JSON.stringify({
       email: account.email,
       password: PASSWORD,
