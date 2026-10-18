@@ -1698,41 +1698,42 @@ const run = async () => {
 
     // Foto bukti demo: satu foto masuk dan satu foto pulang untuk setiap
     // catatan yang punya jam absen, agar pratinjau di detail bisa dibuka.
+    const attendanceQuery = await client.query(
+      `select id, employee_id, work_location_id, date::text as date,
+              check_in_time, check_out_time
+       from attendance_records
+       where employee_id = any($1::uuid[])
+         and date >= $2 and date <= $3`,
+      [[...staffByEmployeeId.keys()], firstOfPrevMonth, today],
+    );
+
     const demoPhotoRows = [];
     const demoPhotoFiles = [];
-    for (const row of attendanceRows) {
-      const [
-        attendanceId,
-        employeeId,
-        ,
-        workLocationId,
-        rowDate,
-        checkInTime,
-        checkOutTime,
-      ] = row;
-      const person = staffByEmployeeId.get(employeeId);
+    for (const row of attendanceQuery.rows) {
+      const person = staffByEmployeeId.get(row.employee_id);
       if (!person) continue;
-      const place = locationNamesById.get(workLocationId) ?? "Lokasi kerja";
+      const place =
+        locationNamesById.get(row.work_location_id) ?? "Lokasi kerja";
 
       for (const slot of [
-        { type: "check_in", label: "Absen masuk", time: checkInTime },
-        { type: "check_out", label: "Absen pulang", time: checkOutTime },
+        { type: "check_in", label: "Absen masuk", time: row.check_in_time },
+        { type: "check_out", label: "Absen pulang", time: row.check_out_time },
       ]) {
         if (!slot.time) continue;
-        const photoKey = `attendance-photo:${attendanceId}:${slot.type}`;
-        const fileName = `${attendanceId}-${slot.type}.svg`;
+        const photoKey = `attendance-photo:${row.id}:${slot.type}`;
+        const fileName = `${row.id}-${slot.type}.svg`;
         const data = demoAttendancePhoto({
           key: photoKey,
           name: person.name,
           label: slot.label,
           time: slot.time,
           place,
-          date: rowDate,
+          date: row.date,
         });
 
         demoPhotoRows.push([
           uuid(photoKey),
-          attendanceId,
+          row.id,
           slot.type,
           fileName,
           "image/svg+xml",

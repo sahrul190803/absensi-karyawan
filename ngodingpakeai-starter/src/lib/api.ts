@@ -4,7 +4,7 @@ import { ZodError } from "zod";
 import { db } from "@/db";
 import { employees } from "@/db/schema";
 import { auth } from "@/lib/auth";
-import { env } from "@/lib/env";
+import { isAllowedOrigin } from "@/lib/origins";
 import type { Permissions } from "@/lib/permissions";
 
 export class ApiError extends Error {
@@ -37,7 +37,7 @@ export async function withApiSession(
     // Better Auth protects its own endpoints. Custom cookie-authenticated mutations need this check too.
     if (!["GET", "HEAD", "OPTIONS"].includes(request.method)) {
       if (
-        request.headers.get("origin") !== new URL(env.BETTER_AUTH_URL).origin ||
+        !isAllowedOrigin(request.headers.get("origin")) ||
         request.headers.get("sec-fetch-site") === "cross-site"
       )
         throw new ApiError(

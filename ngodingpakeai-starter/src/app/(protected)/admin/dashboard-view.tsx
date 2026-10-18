@@ -12,6 +12,7 @@ import {
   ChevronRight,
   ClipboardCheck,
   Eye,
+  GraduationCap,
   ImageOff,
   RefreshCw,
   Send,
@@ -136,6 +137,51 @@ const simulationSteps = [
   },
 ];
 
+const hodSimulationSteps = [
+  {
+    href: "/admin/jadwal?tab=request",
+    title: "Tinjau pengajuan tim",
+    description:
+      "Setujui atau tolak izin, sakit, cuti, dinas luar, dan tukar shift anggota tim.",
+    icon: ClipboardCheck,
+  },
+  {
+    href: "/admin/jadwal?tab=create",
+    title: "Atur jadwal & shift tim",
+    description:
+      "Susun jadwal dan shift anggota divisi per tanggal, lalu pantau hasilnya.",
+    icon: CalendarRange,
+  },
+  {
+    href: "/admin/training",
+    title: "Kelola training",
+    description: "Buat materi training dan pantau peserta dari divisi Anda.",
+    icon: GraduationCap,
+  },
+  {
+    href: "/admin/karyawan",
+    title: "Periksa data karyawan",
+    description:
+      "Lihat dan perbarui data anggota tim. Penambahan karyawan baru dilakukan HRD.",
+    icon: Users,
+  },
+  {
+    href: "/admin/laporan",
+    title: "Pantau laporan",
+    description: "Lihat rekap absensi harian dan bulanan anggota divisi.",
+    icon: BarChart3,
+  },
+  {
+    href: "/admin/makan",
+    title: "Pantau klaim makan",
+    description:
+      "Cek klaim makan anggota tim per sesi dan laporkan klaim yang keliru.",
+    icon: UtensilsCrossed,
+  },
+];
+
+type ManagerRole = "admin" | "hod";
+
 function AttendancePhotoThumb({
   photoId,
   employeeName,
@@ -183,11 +229,12 @@ function AttendancePhotoThumb({
   );
 }
 
-export function DashboardView() {
+export function DashboardView({ role }: { role: ManagerRole }) {
   const [rows, setRows] = useState<AttendanceRow[]>([]);
   const [pending, setPending] = useState<PendingRequest[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>("");
   const [date, setDate] = useState<string>("");
+  const [guideOpen, setGuideOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [jobNotice, setJobNotice] = useState<string | null>(null);
@@ -198,6 +245,14 @@ export function DashboardView() {
   const [detailRow, setDetailRow] = useState<AttendanceRow | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const tableRef = useRef<HTMLElement | null>(null);
+
+  const guideSteps = role === "hod" ? hodSimulationSteps : simulationSteps;
+  const guideTitle =
+    role === "hod" ? "Panduan alur HOD" : "Panduan alur HRD/Admin";
+  const guideDescription =
+    role === "hod"
+      ? "Alur kerja kepala divisi. Penggajian dan pengaturan perusahaan tetap dikelola HRD/Admin."
+      : "Alur lengkap HRD/Admin: persetujuan, jadwal, klaim makan, penggajian, laporan, dan data karyawan.";
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -441,6 +496,20 @@ export function DashboardView() {
               Hari ini
             </Button>
           )}
+          <Button
+            variant="outline"
+            size="sm"
+            aria-expanded={guideOpen}
+            aria-controls="panduan-alur"
+            onClick={() => setGuideOpen((open) => !open)}
+          >
+            <Sparkles aria-hidden="true" />
+            {guideOpen
+              ? "Sembunyikan panduan"
+              : role === "hod"
+                ? "Panduan HOD"
+                : "Panduan HRD/Admin"}
+          </Button>
           <Button size="sm" asChild>
             <Link href="/admin/jadwal">
               <CalendarClock aria-hidden="true" />
@@ -476,61 +545,64 @@ export function DashboardView() {
         </p>
       )}
 
-      <section
-        aria-labelledby="simulasi-admin"
-        className="rounded-lg border border-border-strong bg-primary-quiet/50 p-4 sm:p-5"
-      >
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div>
-            <h2
-              id="simulasi-admin"
-              className="inline-flex items-center gap-2 text-sm font-semibold"
-            >
-              <Sparkles className="size-4" aria-hidden="true" />
-              Simulasi alur admin
-            </h2>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              Klik setiap kartu untuk membuka fiturnya. Semua langkah memakai
-              data demo yang bisa langsung dicoba.
-            </p>
+      {guideOpen && (
+        <section
+          id="panduan-alur"
+          aria-labelledby="panduan-alur-title"
+          className="rounded-lg border border-border-strong bg-primary-quiet/50 p-4 sm:p-5"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <h2
+                id="panduan-alur-title"
+                className="inline-flex items-center gap-2 text-sm font-semibold"
+              >
+                <Sparkles className="size-4" aria-hidden="true" />
+                {guideTitle}
+              </h2>
+              <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">
+                {guideDescription}
+              </p>
+            </div>
+            <span className="rounded-full border border-border-strong bg-card px-2.5 py-0.5 font-mono text-[11px] text-muted-foreground">
+              {role === "hod" ? "Akses HOD" : "Akses HRD/Admin"} ·{" "}
+              {guideSteps.length} langkah
+            </span>
           </div>
-          <span className="rounded-full border border-border-strong bg-card px-2.5 py-0.5 font-mono text-[11px] text-muted-foreground">
-            {rows.length} absensi · {pending.length} pengajuan
-          </span>
-        </div>
-        <ol className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-          {simulationSteps.map((step, index) => {
-            const Icon = step.icon;
-            return (
-              <li key={step.href}>
-                <Link
-                  href={step.href}
-                  className="group flex h-full items-start gap-3 rounded-lg border border-border bg-card p-3 transition-colors hover:border-border-strong hover:bg-muted/60 focus-visible:outline-2 focus-visible:outline-ring"
-                >
-                  <span className="grid size-9 flex-none place-items-center rounded-md border border-border bg-background text-primary-text">
-                    <Icon className="size-4" aria-hidden="true" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-1.5 text-sm font-semibold">
-                      <span className="font-mono text-[11px] text-muted-foreground">
-                        {index + 1}.
+          <ol className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {guideSteps.map((step, index) => {
+              const Icon = step.icon;
+              return (
+                <li key={step.href}>
+                  <Link
+                    href={step.href}
+                    className="group flex h-full items-start gap-3 rounded-lg border border-border bg-card p-3 transition-colors hover:border-border-strong hover:bg-muted/60 focus-visible:outline-2 focus-visible:outline-ring"
+                  >
+                    <span className="grid size-9 flex-none place-items-center rounded-md border border-border bg-background text-primary-text">
+                      <Icon className="size-4" aria-hidden="true" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-1.5 text-sm font-semibold">
+                        <span className="font-mono text-[11px] text-muted-foreground">
+                          {index + 1}.
+                        </span>
+                        {step.title}
+                        <ArrowUpRight
+                          className="size-3.5 text-muted-foreground transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
+                          aria-hidden="true"
+                        />
                       </span>
-                      {step.title}
-                      <ArrowUpRight
-                        className="size-3.5 text-muted-foreground transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
-                        aria-hidden="true"
-                      />
+                      <span className="mt-1 block text-xs leading-5 text-muted-foreground">
+                        {step.description}
+                      </span>
                     </span>
-                    <span className="mt-1 block text-xs leading-5 text-muted-foreground">
-                      {step.description}
-                    </span>
-                  </span>
-                </Link>
-              </li>
-            );
-          })}
-        </ol>
-      </section>
+                  </Link>
+                </li>
+              );
+            })}
+          </ol>
+        </section>
+      )}
 
       <dl className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {statCards.map((stat) => {
