@@ -90,6 +90,9 @@ Aset dan teks Play Store tersedia di `mobile-app/store-listing/`:
 - checklist Internal Testing di `PLAY-CONSOLE-INTERNAL-TESTING.md`.
 
 Privacy policy publik: `https://absensi-karyawan-gray.vercel.app/privacy`.
+Halaman download adaptif: `https://absensi-karyawan-gray.vercel.app/download`.
+IPA iOS unsigned:
+`https://github.com/sahrul190803/absensi-karyawan/releases/tag/ios-v1.2-unsigned`.
 Lengkapi `ngodingpakeai-starter/src/config/privacy.ts` sebelum submit ke Play
 Console.
 

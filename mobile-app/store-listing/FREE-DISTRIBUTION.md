@@ -73,26 +73,38 @@ menggantikan aplikasi lama; pengguna harus uninstall dulu.
 
 ## Distribusi iOS
 
-Tanpa Apple Developer Program berbayar:
+Build iOS unsigned sudah tersedia dari GitHub Actions macOS 26 (Xcode 26):
 
-- Tidak bisa TestFlight.
-- Tidak bisa App Store.
-- Bisa install ke perangkat sendiri lewat Xcode dengan Apple ID gratis, tetapi
-  sertifikat berlaku sekitar 7 hari dan harus diperbarui.
-- Membutuhkan macOS + Xcode 26.
+- Release: https://github.com/sahrul190803/absensi-karyawan/releases/tag/ios-v1.2-unsigned
+- File: `hadirku-ios-unsigned-1.2.ipa`
+- Ukuran: 1.533.393 byte
+- SHA-256:
+  `C4C2FF4D11EC9A5755560ADBC3C9F96EC2A537FA4DCCE3E32CA88064B761B0FF`
 
-Dengan Apple Developer Program:
+Cara install dari Windows:
 
-- TestFlight untuk tester internal/eksternal.
-- App Store.
-- Masa berlaku provisioning satu tahun.
+1. Install iTunes/Apple Devices dan Sideloadly atau AltStore.
+2. Hubungkan iPhone dengan kabel USB.
+3. Masukkan IPA dan Apple ID ke Sideloadly/AltStore.
+4. Percayai sertifikat developer di Settings → General → VPN & Device
+   Management.
+5. Apple ID gratis berlaku sekitar 7 hari; sign ulang setelah kedaluwarsa.
+
+Batasannya:
+
+- Bukan TestFlight/App Store.
+- Hanya untuk perangkat sendiri dengan Apple ID gratis.
+- Push notification APNs belum dikonfigurasi.
+- Untuk TestFlight/App Store tetap diperlukan Apple Developer Program berbayar
+  dan signing resmi.
 
 ## Yang tetap gratis
 
 - Backend production di Vercel dan Neon selama masih dalam kuota gratis.
 - Privacy policy di `/privacy`.
 - APK Android untuk distribusi internal.
-- Halaman download sederhana jika nanti diperlukan.
+- IPA iOS unsigned lewat GitHub Actions dan Sideloadly/AltStore.
+- Halaman download adaptif di `/download`.
 
 ## Jika nanti ingin ke Play Store
 

@@ -44,6 +44,11 @@ ringan. Modul yang belum dibangun di mobile: push notification dan verifikasi
 wajah. Panduan signing/upload ada di
 `../ngodingpakeai-starter/docs/mobile-release-signing.md`.
 
+iOS juga sudah dibuild sebagai **IPA unsigned** lewat GitHub Actions macOS 26.
+IPA bisa ditandatangani dan dipasang dari Windows memakai Sideloadly/AltStore
+dengan Apple ID. Ini bukan TestFlight/App Store dan berlaku sekitar 7 hari untuk
+Apple ID gratis.
+
 Aset dan teks Play Store ada di `store-listing/`: ikon 512×512, feature graphic
 1024×500, 8 screenshot 1080×1920, deskripsi, data safety draft, dan draf
 kebijakan privasi.
@@ -131,6 +136,28 @@ npx cap add ios         # sekali saja
 npx cap sync ios
 npx cap open ios
 ```
+
+### iOS unsigned tanpa Mac lokal
+
+Workflow `.github/workflows/ios-build.yml` membangun IPA unsigned di
+GitHub Actions `macos-latest` (macOS 26 + Xcode 26).
+
+Jalankan dengan push tag:
+
+```sh
+git tag ios-v1.2-3
+git push origin ios-v1.2-3
+```
+
+Atau buka **Actions → iOS unsigned build → Run workflow** jika workflow sudah
+ada di branch default.
+
+Hasil:
+- Artifact: `hadirku-ios-unsigned`
+- File: `hadirku-unsigned.ipa`
+- IPA unsigned harus ditandatangani dengan Sideloadly/AltStore + Apple ID
+  sebelum bisa dipasang di iPhone.
+- Ini bukan TestFlight/App Store.
 
 ## Arsitektur auth mobile
 

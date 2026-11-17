@@ -162,7 +162,9 @@ Diuji dengan Playwright (Chromium headless, viewport 390×844), login HRD dan HO
   - Ditandatangani dengan keystore release lokal.
   - Certificate SHA-256: `09:58:35:A5:EA:E2:A5:4D:14:90:E6:7C:A8:7F:04:32:D9:3B:C0:94:15:D0:9C:52:1F:0D:44:66:92:36:37:A0`
   - Panduan: `ngodingpakeai-starter/docs/mobile-release-signing.md`
-- iOS: project berhasil digenerate dan disync, version 1.2 (build 3), tetapi **belum dibuild** (butuh macOS + Xcode 26).
+- iOS: project berhasil digenerate dan disync, version 1.2 (build 3). Build
+  unsigned berhasil di GitHub Actions macOS 26 (Xcode 26); IPA tersedia sebagai
+  artifact/release unsigned. Belum ditandatangani untuk TestFlight/App Store.
 
 ---
 
@@ -180,7 +182,9 @@ belum login) tidak berlaku lagi.
 - AAB dan APK release sudah dibuild serta diverifikasi.
 - Detail path, fingerprint, dan langkah upload ada di
   `docs/mobile-release-signing.md`.
-- iOS signing/provisioning belum diatur (butuh macOS + Xcode 26).
+- iOS signing/provisioning belum diatur. Build unsigned sudah tersedia lewat
+  `.github/workflows/ios-build.yml`; untuk TestFlight/App Store tetap butuh
+  Apple Developer Program dan signing di macOS/Xcode.
 
 ### Modul yang belum dibangun
 
@@ -228,6 +232,7 @@ fisik. Pengujian UI sebelumnya dilakukan dengan Playwright di viewport ponsel.
 | `mobile-app/ios/App/App/Info.plist` | Izin iOS |
 | `ngodingpakeai-starter/src/proxy.ts` | CORS API |
 | `ngodingpakeai-starter/src/lib/auth.ts` | Bearer plugin |
+| `.github/workflows/ios-build.yml` | Build IPA unsigned di macOS 26 |
 
 ---
 
