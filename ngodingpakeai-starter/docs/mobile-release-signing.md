@@ -81,6 +81,10 @@ Aset dan teks Play Store tersedia di `mobile-app/store-listing/`:
 - draf kebijakan privasi,
 - panduan upload di `play-store-listing.md`.
 
+Privacy policy publik: `https://absensi-karyawan-gray.vercel.app/privacy`.
+Lengkapi `ngodingpakeai-starter/src/config/privacy.ts` sebelum submit ke Play
+Console.
+
 ## Upload ke Play Console
 
 1. Buka Play Console → aplikasi Hadirku Lecarassa.

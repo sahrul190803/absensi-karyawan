@@ -138,10 +138,14 @@ Bagian ini harus diverifikasi dengan kebijakan perusahaan dan legal.
 
 ## Privacy policy
 
-- Draf: `store-listing/privacy-policy-draft.md`
-- Play Console memerlukan **URL publik** (HTTPS), bukan file lokal.
-- Publikasikan draf di website perusahaan atau halaman kebijakan privasi, lalu masukkan URL-nya.
-- Ganti placeholder nama perusahaan, alamat, email, dan tanggal berlaku.
+- URL publik: **https://absensi-karyawan-gray.vercel.app/privacy**
+- Halaman sumber: `ngodingpakeai-starter/src/app/privacy/page.tsx`
+- Data perusahaan: `ngodingpakeai-starter/src/config/privacy.ts`
+- Draf teks: `store-listing/privacy-policy-draft.md`
+- Sebelum submit ke Play Console, ganti placeholder alamat, email, dan telepon
+  di `src/config/privacy.ts`, lalu deploy ulang.
+- Play Console memerlukan **URL HTTPS publik**; halaman `/privacy` sudah memenuhi
+  syarat tersebut setelah placeholder dilengkapi.
 
 ## Aset store listing
 
