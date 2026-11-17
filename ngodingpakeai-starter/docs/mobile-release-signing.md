@@ -69,6 +69,18 @@ Hasil yang sudah diperiksa:
 - Version: `1.2` (versionCode `3`)
 - Release tidak debuggable.
 
+## Store listing
+
+Aset dan teks Play Store tersedia di `mobile-app/store-listing/`:
+
+- ikon 512×512,
+- feature graphic 1024×500,
+- 8 screenshot 1080×1920,
+- short/full description,
+- data safety draft,
+- draf kebijakan privasi,
+- panduan upload di `play-store-listing.md`.
+
 ## Upload ke Play Console
 
 1. Buka Play Console → aplikasi Hadirku Lecarassa.
