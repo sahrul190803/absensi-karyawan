@@ -18,6 +18,9 @@ screenshots/
 .env.production
 .env.development
 
+# Google Play service account (local only)
+play-service-account*.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

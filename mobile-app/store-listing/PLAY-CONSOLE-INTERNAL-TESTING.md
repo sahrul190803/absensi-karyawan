@@ -154,6 +154,10 @@ Urutan:
 
 ## 4. Buat Internal testing
 
+Alternatif otomatis: setelah service account disiapkan, gunakan
+`npm run play:upload -- --track internal --version-code 3`. Lihat
+`PLAY-UPLOAD-AUTOMATION.md`.
+
 1. Buka **Testing → Internal testing → Create new release**.
 2. Upload `app-release.aab`.
 3. Tunggu Play Console memproses bundle.
@@ -166,6 +170,21 @@ Urutan:
 7. Salin **opt-in link** dan kirim ke tester.
 
 ## 5. Uji di HP fisik
+
+Alternatif cepat sebelum rilis Play Store tersedia: install APK release via adb.
+
+```powershell
+$env:ANDROID_HOME = "$env:LOCALAPPDATA\Android\Sdk"
+& "$env:ANDROID_HOME\platform-tools\adb.exe" devices
+& "$env:ANDROID_HOME\platform-tools\adb.exe" install -r `
+  mobile-app\android\app\build\outputs\apk\release\app-release.apk
+& "$env:ANDROID_HOME\platform-tools\adb.exe" shell am start `
+  -n id.lecarassa.hadirku/.MainActivity
+```
+
+Ini menguji APK release, tetapi **bukan** pengujian distribusi Play Store.
+Untuk menguji dari Play Store, selesaikan Internal Testing dan gunakan opt-in
+link.
 
 1. Tester membuka opt-in link dan menerima undangan.
 2. Install dari Play Store.
