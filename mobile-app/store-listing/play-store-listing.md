@@ -164,6 +164,9 @@ Bagian ini harus diverifikasi dengan kebijakan perusahaan dan legal.
 
 ## Langkah upload ke Play Console
 
+Panduan langkah demi langkah yang lebih rinci tersedia di
+`PLAY-CONSOLE-INTERNAL-TESTING.md`.
+
 1. Buka [Google Play Console](https://play.google.com/console) dan buat aplikasi baru:
    - Nama: **Hadirku Lecarassa**
    - Bahasa default: **Indonesia**

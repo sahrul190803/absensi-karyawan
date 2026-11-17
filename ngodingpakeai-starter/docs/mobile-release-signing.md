@@ -79,7 +79,8 @@ Aset dan teks Play Store tersedia di `mobile-app/store-listing/`:
 - short/full description,
 - data safety draft,
 - draf kebijakan privasi,
-- panduan upload di `play-store-listing.md`.
+- panduan upload di `play-store-listing.md`,
+- checklist Internal Testing di `PLAY-CONSOLE-INTERNAL-TESTING.md`.
 
 Privacy policy publik: `https://absensi-karyawan-gray.vercel.app/privacy`.
 Lengkapi `ngodingpakeai-starter/src/config/privacy.ts` sebelum submit ke Play

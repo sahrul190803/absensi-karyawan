@@ -1,0 +1,5 @@
+Versi 1.2
+• Modul admin/HOD lengkap: persetujuan, jadwal, karyawan, laporan, klaim makan, training, master data, dan pengaturan.
+• Penggajian mobile: periode bulanan, penyesuaian gaji, finalisasi, pembayaran, gaji harian, export, dan riwayat.
+• Peningkatan performa: layar admin dimuat terpisah agar startup lebih ringan.
+• Perbaikan laporan bulanan untuk bulan dengan 30 hari.

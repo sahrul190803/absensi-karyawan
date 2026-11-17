@@ -18,6 +18,8 @@ Aset untuk listing Google Play Console.
 | `screenshots/08-penggajian.png` | 1080×1920 PNG | Screenshot 8 |
 | `screenshots/alternates/05-dashboard-admin.png` | 1080×1920 PNG | Alternatif screenshot dashboard |
 | `play-store-listing.md` | Teks | Judul, deskripsi, data safety, panduan upload |
+| `PLAY-CONSOLE-INTERNAL-TESTING.md` | Teks | Checklist langkah demi langkah Internal Testing |
+| `release-notes-1.2.txt` | Teks | Release notes siap salin |
 | `privacy-policy-draft.md` | Teks | Draf kebijakan privasi |
 | `feature-graphic.html` | HTML | Sumber feature graphic |
 
