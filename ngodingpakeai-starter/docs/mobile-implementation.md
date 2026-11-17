@@ -156,6 +156,12 @@ Diuji dengan Playwright (Chromium headless, viewport 390×844), login HRD dan HO
   - Package: `id.lecarassa.hadirku`
   - Version: **1.2 (versionCode 3)**
   - `VITE_API_URL`: `https://absensi-karyawan-gray.vercel.app`
+- Android release: **berhasil**.
+  - AAB: `mobile-app/android/app/build/outputs/bundle/release/app-release.aab`
+  - APK: `mobile-app/android/app/build/outputs/apk/release/app-release.apk`
+  - Ditandatangani dengan keystore release lokal.
+  - Certificate SHA-256: `09:58:35:A5:EA:E2:A5:4D:14:90:E6:7C:A8:7F:04:32:D9:3B:C0:94:15:D0:9C:52:1F:0D:44:66:92:36:37:A0`
+  - Panduan: `ngodingpakeai-starter/docs/mobile-release-signing.md`
 - iOS: project berhasil digenerate dan disync, version 1.2 (build 3), tetapi **belum dibuild** (butuh macOS + Xcode 26).
 
 ---
@@ -170,10 +176,11 @@ belum login) tidak berlaku lagi.
 
 ### Build release
 
-- Belum ada keystore release. Pembuatan keystore dan password harus disetujui
-  pemilik project dan disimpan aman, tidak di-commit.
-- Belum ada AAB release.
-- iOS signing/provisioning belum diatur.
+- Keystore release sudah dibuat dan disimpan lokal (tidak di-commit).
+- AAB dan APK release sudah dibuild serta diverifikasi.
+- Detail path, fingerprint, dan langkah upload ada di
+  `docs/mobile-release-signing.md`.
+- iOS signing/provisioning belum diatur (butuh macOS + Xcode 26).
 
 ### Modul yang belum dibangun
 
@@ -259,11 +266,19 @@ cd "C:\Users\user\orca\projects\absensi-karyawan - mobile"
 npx vercel deploy --prod
 ```
 
-Untuk release AAB, buat keystore dulu lalu:
+Untuk release AAB/APK, pastikan `android/keystore.properties` dan keystore
+release tersedia, lalu:
 
 ```powershell
-.\gradlew.bat bundleRelease
+.\gradlew.bat bundleRelease assembleRelease --no-daemon
 ```
+
+Hasil:
+
+- `android/app/build/outputs/bundle/release/app-release.aab`
+- `android/app/build/outputs/apk/release/app-release.apk`
+
+Panduan signing lengkap: `docs/mobile-release-signing.md`.
 
 ---
 

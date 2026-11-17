@@ -38,9 +38,11 @@ Sudah tersedia:
 - Penggajian: hitung periode, rincian & penyesuaian gaji, finalisasi,
   pembayaran, export, gaji harian, dan riwayat pembayaran.
 
-APK debug production (versi 1.2) sudah dibuild dengan API Vercel HTTPS.
-Layar admin dimuat sebagai chunk terpisah agar startup karyawan tetap ringan.
-Modul yang belum dibangun di mobile: push notification dan verifikasi wajah.
+APK debug dan AAB/APK release (versi 1.2) sudah dibuild dengan API Vercel
+HTTPS. Layar admin dimuat sebagai chunk terpisah agar startup karyawan tetap
+ringan. Modul yang belum dibangun di mobile: push notification dan verifikasi
+wajah. Panduan signing/upload ada di
+`../ngodingpakeai-starter/docs/mobile-release-signing.md`.
 
 ## Prasyarat
 
