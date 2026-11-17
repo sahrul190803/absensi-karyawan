@@ -64,8 +64,10 @@ export async function getAttendanceReport(query: ReportQueryInput) {
   } else {
     const month =
       query.month ?? `${now.getFullYear()}-${pad(now.getMonth() + 1)}`;
+    const [yearPart, monthPart] = month.split("-").map(Number);
+    const lastDay = new Date(Date.UTC(yearPart, monthPart, 0)).getUTCDate();
     from = `${month}-01`;
-    to = `${month}-31`;
+    to = `${month}-${pad(lastDay)}`;
     label = month;
   }
 

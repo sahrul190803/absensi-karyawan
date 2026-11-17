@@ -2,16 +2,19 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ArrowUpRight,
   Bell,
   Camera,
   CalendarDays,
   CheckCircle2,
+  Gauge,
   GraduationCap,
   History,
   Inbox,
   MapPin,
   RefreshCw,
   Send,
+  Sparkles,
   UtensilsCrossed,
   User,
 } from "lucide-react";
@@ -127,9 +130,11 @@ const jakartaParts = (date: Date) => {
 export function AttendanceHome({
   userName,
   locationFree,
+  managerMode = false,
 }: {
   userName: string;
   locationFree: boolean;
+  managerMode?: boolean;
 }) {
   const [today, setToday] = useState<Today | null>(null);
   const [loading, setLoading] = useState(true);
@@ -401,6 +406,51 @@ export function AttendanceHome({
       ? "Sudah absen masuk"
       : "Absen hari ini selesai";
 
+  const guideSteps = [
+    ...(managerMode
+      ? [
+          {
+            href: "/admin",
+            label: "Buka dashboard HOD",
+            description:
+              "Tinjau pengajuan tim, atur jadwal shift, dan pantau rekap.",
+            icon: Gauge,
+          },
+        ]
+      : []),
+    {
+      href: "#status-absensi",
+      label: "Absen masuk & pulang",
+      description:
+        "Ambil foto selfie. Waktu, lokasi, dan GPS tercatat otomatis.",
+      icon: Camera,
+    },
+    {
+      href: "/app/pengajuan",
+      label: "Ajukan izin atau cuti",
+      description: "Kirim pengajuan dan pantau status persetujuannya.",
+      icon: Send,
+    },
+    {
+      href: "/app/makan",
+      label: "Klaim jatah makan",
+      description: "Klaim makan pagi, siang, atau malam sesuai shift.",
+      icon: UtensilsCrossed,
+    },
+    {
+      href: "/app/jadwal",
+      label: "Lihat jadwal shift",
+      description: "Cek jadwal kerja dan lokasi absen beberapa hari ke depan.",
+      icon: CalendarDays,
+    },
+    {
+      href: "/app/riwayat",
+      label: "Buka riwayat absensi",
+      description: "Lihat kehadiran, keterlambatan, dan rekap bulanan.",
+      icon: History,
+    },
+  ];
+
   const quickLinks = [
     { href: "/app/attendant", label: "Attendant", icon: Inbox },
     { href: "/app/jadwal", label: "Jadwal Saya", icon: CalendarDays },
@@ -409,6 +459,9 @@ export function AttendanceHome({
     { href: "/app/training", label: "Training", icon: GraduationCap },
     { href: "/app/notifikasi", label: "Notifikasi", icon: Bell },
     { href: "/app/profil", label: "Profil", icon: User },
+    ...(managerMode
+      ? [{ href: "/admin", label: "Dashboard HOD", icon: Gauge }]
+      : []),
   ];
 
   return (
@@ -428,6 +481,65 @@ export function AttendanceHome({
         </h1>
       </div>
 
+      <section
+        aria-labelledby="panduan-karyawan"
+        className="rounded-lg border border-border-strong bg-primary-quiet/50 p-4 sm:p-5"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h2
+              id="panduan-karyawan"
+              className="inline-flex items-center gap-2 text-sm font-semibold"
+            >
+              <Sparkles className="size-4" aria-hidden="true" />
+              {managerMode
+                ? "Panduan HOD & karyawan"
+                : "Panduan simulasi karyawan"}
+            </h2>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              Klik setiap langkah untuk mencoba fitur dengan data demo hari ini.
+            </p>
+          </div>
+          {locationFree && (
+            <span className="rounded-full border border-border-strong bg-card px-2.5 py-0.5 text-[11px] text-muted-foreground">
+              Mode dinas luar aktif
+            </span>
+          )}
+        </div>
+        <ol className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {guideSteps.map((step, index) => {
+            const Icon = step.icon;
+            return (
+              <li key={step.href}>
+                <Link
+                  href={step.href}
+                  className="group flex h-full items-start gap-3 rounded-lg border border-border bg-card p-3 transition-colors hover:border-border-strong hover:bg-muted/60 focus-visible:outline-2 focus-visible:outline-ring"
+                >
+                  <span className="grid size-9 flex-none place-items-center rounded-md border border-border bg-background text-primary-text">
+                    <Icon className="size-4" aria-hidden="true" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-1.5 text-sm font-semibold">
+                      <span className="font-mono text-[11px] text-muted-foreground">
+                        {index + 1}.
+                      </span>
+                      {step.label}
+                      <ArrowUpRight
+                        className="size-3.5 text-muted-foreground transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
+                        aria-hidden="true"
+                      />
+                    </span>
+                    <span className="mt-1 block text-xs leading-5 text-muted-foreground">
+                      {step.description}
+                    </span>
+                  </span>
+                </Link>
+              </li>
+            );
+          })}
+        </ol>
+      </section>
+
       {notice && (
         <p
           role="status"
@@ -446,13 +558,18 @@ export function AttendanceHome({
         </p>
       )}
 
-      <section className="relative overflow-hidden rounded-lg border border-border-strong bg-card p-5">
+      <section
+        id="status-absensi"
+        className="relative scroll-mt-24 overflow-hidden rounded-lg border border-border-strong bg-card p-5"
+      >
         <span
           aria-hidden="true"
           className="absolute inset-y-3 left-0 w-1 rounded-r bg-primary"
         />
         {loading ? (
-          <p className="text-sm text-muted-foreground">Memuat status absensi…</p>
+          <p className="text-sm text-muted-foreground">
+            Memuat status absensi…
+          </p>
         ) : today && !today.employee ? (
           <div className="space-y-2">
             <p className="text-sm text-muted-foreground">

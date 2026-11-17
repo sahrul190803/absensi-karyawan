@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2732" height="2732" viewBox="0 0 2732 2732">
+  <rect width="2732" height="2732" fill="#F7F7F2"/>
+  <g transform="translate(1156 720)">
+    <rect width="420" height="420" rx="96" fill="#E4F222"/>
+    <g transform="translate(42 42) scale(0.328)" fill="none" stroke="#0C0A08" stroke-width="56" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M288 400h384v152c0 97-79 176-176 176h-32c-97 0-176-79-176-176V400z"/>
+      <path d="M672 448h40c66 0 120 54 120 120s-54 120-120 120h-40"/>
+      <path d="M384 280c-20 20-20 52 0 72M480 280c-20 20-20 52 0 72M576 280c-20 20-20 52 0 72"/>
+    </g>
+  </g>
+  <text x="1366" y="1360" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="132" font-weight="700" fill="#0C0A08">Hadirku Lecarassa</text>
+  <text x="1366" y="1450" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="52" font-weight="500" fill="#66675F">Absensi kehadiran karyawan</text>
+</svg>

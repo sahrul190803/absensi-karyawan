@@ -7,11 +7,16 @@ export const metadata: Metadata = { title: "Beranda Absensi" };
 
 export default async function AppPage() {
   const { user } = await requireSession();
-  const roleList = (user.role ?? "user")
-    .split(",")
-    .map((role) => role.trim());
+  const roleList = (user.role ?? "user").split(",").map((role) => role.trim());
   const locationFree = LOCATION_FREE_ROLES.some((role) =>
     roleList.includes(role),
   );
-  return <AttendanceHome userName={user.name} locationFree={locationFree} />;
+  const managerMode = roleList.includes("hod");
+  return (
+    <AttendanceHome
+      userName={user.name}
+      locationFree={locationFree}
+      managerMode={managerMode}
+    />
+  );
 }

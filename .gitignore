@@ -3,3 +3,5 @@
 .vercel-token
 .vercel
 .env*
+!mobile-app/.env.example
+ngodingpakeai-starter/screenshots/

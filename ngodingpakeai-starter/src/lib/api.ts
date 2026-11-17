@@ -34,8 +34,15 @@ export async function withApiSession(
     if (!session)
       throw new ApiError(401, "UNAUTHORIZED", "Sign in to continue.");
 
+    // Bearer tokens are used by the Capacitor app. They are not attached
+    // automatically by browsers, so the cookie-specific CSRF origin check does
+    // not apply. Web cookie requests keep the origin check below.
+    const bearerRequest =
+      request.headers.get("authorization")?.toLowerCase().startsWith("bearer ") ??
+      false;
+
     // Better Auth protects its own endpoints. Custom cookie-authenticated mutations need this check too.
-    if (!["GET", "HEAD", "OPTIONS"].includes(request.method)) {
+    if (!bearerRequest && !["GET", "HEAD", "OPTIONS"].includes(request.method)) {
       if (
         !isAllowedOrigin(request.headers.get("origin")) ||
         request.headers.get("sec-fetch-site") === "cross-site"

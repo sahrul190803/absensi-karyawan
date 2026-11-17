@@ -1,7 +1,7 @@
 import "server-only";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { admin } from "better-auth/plugins";
+import { admin, bearer } from "better-auth/plugins";
 import { nextCookies } from "better-auth/next-js";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
@@ -56,6 +56,10 @@ export const auth = betterAuth({
       defaultRole: DEFAULT_ROLE,
       adminRoles: ADMIN_ROLES,
     }),
+    // Mobile clients (Capacitor) authenticate with a session bearer token
+    // instead of a cross-origin cookie. The plugin turns the Authorization
+    // header into the same server-side session used by the web app.
+    bearer(),
     // Keep nextCookies() last so it observes every other plugin's cookies.
     nextCookies(),
   ],
