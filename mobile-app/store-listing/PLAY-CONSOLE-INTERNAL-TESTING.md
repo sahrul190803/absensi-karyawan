@@ -1,5 +1,9 @@
 # Play Console — Internal Testing Checklist
 
+> **Publikasi store ditunda.** Google Play Console memerlukan biaya registrasi
+> ±US$25 (sekali bayar) dan Apple Developer Program ±US$99/tahun. Untuk
+> distribusi gratis, gunakan `FREE-DISTRIBUTION.md`.
+
 Panduan operasional untuk merilis Hadirku Lecarassa ke Internal Testing.
 
 ## Yang harus siap

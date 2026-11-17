@@ -1,5 +1,9 @@
 # Upload AAB ke Play Console via Service Account
 
+> **JANGAN dijalankan sampai akun Google Play Console sudah terdaftar dan biaya
+> registrasi dibayar.** Untuk distribusi gratis, gunakan
+> `FREE-DISTRIBUTION.md` (APK langsung).
+
 Script: `mobile-app/scripts/play-upload.mjs`  
 NPM scripts: `play:upload`, `play:dry-run`
 

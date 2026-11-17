@@ -71,6 +71,10 @@ Hasil yang sudah diperiksa:
 
 ## Store listing
 
+> Publikasi Play Store/App Store ditunda karena biaya akun developer. Untuk
+> distribusi gratis, gunakan APK release dan panduan
+> `mobile-app/store-listing/FREE-DISTRIBUTION.md`.
+
 Aset dan teks Play Store tersedia di `mobile-app/store-listing/`:
 
 - ikon 512×512,

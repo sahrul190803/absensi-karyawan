@@ -48,6 +48,9 @@ Aset dan teks Play Store ada di `store-listing/`: ikon 512×512, feature graphic
 1024×500, 8 screenshot 1080×1920, deskripsi, data safety draft, dan draf
 kebijakan privasi.
 
+Publikasi store ditunda. Untuk distribusi gratis, gunakan APK release dan
+panduan `store-listing/FREE-DISTRIBUTION.md`.
+
 ## Prasyarat
 
 - Node.js 22+
