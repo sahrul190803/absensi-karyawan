@@ -13,6 +13,8 @@ dist-ssr
 *.local
 !.env.example
 screenshots/
+!store-listing/screenshots/
+!store-listing/screenshots/**
 .env.production
 .env.development
 

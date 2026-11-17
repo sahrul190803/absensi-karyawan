@@ -44,6 +44,10 @@ ringan. Modul yang belum dibangun di mobile: push notification dan verifikasi
 wajah. Panduan signing/upload ada di
 `../ngodingpakeai-starter/docs/mobile-release-signing.md`.
 
+Aset dan teks Play Store ada di `store-listing/`: ikon 512×512, feature graphic
+1024×500, 8 screenshot 1080×1920, deskripsi, data safety draft, dan draf
+kebijakan privasi.
+
 ## Prasyarat
 
 - Node.js 22+
