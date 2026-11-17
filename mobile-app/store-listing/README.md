@@ -23,6 +23,7 @@ Aset untuk listing Google Play Console.
 | `FREE-DISTRIBUTION.md` | Teks | Distribusi APK gratis tanpa Play Store/App Store |
 | `GITHUB-RELEASE-1.2.md` | Teks | Catatan rilis GitHub v1.2 |
 | `GITHUB-RELEASE-IOS-1.2.md` | Teks | Catatan rilis IPA iOS unsigned |
+| `LAPORAN-STATUS-HADIRKU-2026-11-18.pdf` | PDF | Laporan status untuk client |
 | `release-notes-1.2.txt` | Teks | Release notes siap salin |
 | `privacy-policy-draft.md` | Teks | Draf kebijakan privasi |
 | `feature-graphic.html` | HTML | Sumber feature graphic |
