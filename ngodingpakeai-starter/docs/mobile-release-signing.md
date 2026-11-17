@@ -75,6 +75,9 @@ Hasil yang sudah diperiksa:
 > distribusi gratis, gunakan APK release dan panduan
 > `mobile-app/store-listing/FREE-DISTRIBUTION.md`.
 
+Download APK publik:
+**https://absensi-karyawan-gray.vercel.app/download**
+
 Aset dan teks Play Store tersedia di `mobile-app/store-listing/`:
 
 - ikon 512×512,

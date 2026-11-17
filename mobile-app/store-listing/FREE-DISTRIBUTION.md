@@ -20,6 +20,12 @@ Catatan:
 
 ## Distribusi Android gratis
 
+Link download resmi:
+
+- Halaman download: **https://absensi-karyawan-gray.vercel.app/download**
+- GitHub Release: **https://github.com/sahrul190803/absensi-karyawan/releases/tag/v1.2**
+- File: `hadirku-lecarassa-1.2.apk`
+
 APK release sudah ditandatangani dan siap dibagikan:
 
 `mobile-app/android/app/build/outputs/apk/release/app-release.apk`

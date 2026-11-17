@@ -51,6 +51,9 @@ kebijakan privasi.
 Publikasi store ditunda. Untuk distribusi gratis, gunakan APK release dan
 panduan `store-listing/FREE-DISTRIBUTION.md`.
 
+Link download APK:
+**https://absensi-karyawan-gray.vercel.app/download**
+
 ## Prasyarat
 
 - Node.js 22+

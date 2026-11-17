@@ -130,9 +130,22 @@ export default async function Home() {
       </main>
 
       <footer className="border-t border-border">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-2 px-6 py-6 text-sm text-muted-foreground">
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-6 py-6 text-sm text-muted-foreground">
           <span>{siteConfig.name}</span>
-          <span>Waktu resmi memakai jam server (WIB).</span>
+          <div className="flex flex-wrap items-center gap-4">
+            <Link
+              href="/download"
+              className="underline-offset-4 hover:text-foreground hover:underline"
+            >
+              Download APK
+            </Link>
+            <Link
+              href="/privacy"
+              className="underline-offset-4 hover:text-foreground hover:underline"
+            >
+              Kebijakan Privasi
+            </Link>
+          </div>
         </div>
       </footer>
     </div>

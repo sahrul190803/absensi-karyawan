@@ -21,6 +21,7 @@ Aset untuk listing Google Play Console.
 | `PLAY-CONSOLE-INTERNAL-TESTING.md` | Teks | Checklist langkah demi langkah Internal Testing |
 | `PLAY-UPLOAD-AUTOMATION.md` | Teks | Setup service account dan upload AAB via API |
 | `FREE-DISTRIBUTION.md` | Teks | Distribusi APK gratis tanpa Play Store/App Store |
+| `GITHUB-RELEASE-1.2.md` | Teks | Catatan rilis GitHub v1.2 |
 | `release-notes-1.2.txt` | Teks | Release notes siap salin |
 | `privacy-policy-draft.md` | Teks | Draf kebijakan privasi |
 | `feature-graphic.html` | HTML | Sumber feature graphic |
