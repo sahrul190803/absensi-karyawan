@@ -1,0 +1,83 @@
+name: iOS unsigned build
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "ios-*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-unsigned-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: mobile-app/package-lock.json
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Install mobile dependencies
+        working-directory: mobile-app
+        run: npm ci
+
+      - name: Build web assets
+        working-directory: mobile-app
+        env:
+          VITE_API_URL: https://absensi-karyawan-gray.vercel.app
+        run: npm run build
+
+      - name: Sync Capacitor iOS
+        working-directory: mobile-app
+        run: npx cap sync ios
+
+      - name: Build unsigned device app
+        working-directory: mobile-app/ios/App
+        run: |
+          xcodebuild \
+            -project App.xcodeproj \
+            -target App \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            ONLY_ACTIVE_ARCH=NO \
+            build
+
+      - name: Package unsigned IPA
+        working-directory: mobile-app/ios/App
+        run: |
+          APP_PATH=$(find build/Build/Products/Release-iphoneos -maxdepth 1 -name '*.app' | head -n 1)
+          echo "App bundle: $APP_PATH"
+          test -n "$APP_PATH"
+          rm -rf Payload hadirku-unsigned.ipa
+          mkdir -p Payload
+          cp -R "$APP_PATH" Payload/
+          zip -qr hadirku-unsigned.ipa Payload
+          ls -lh hadirku-unsigned.ipa
+          shasum -a 256 hadirku-unsigned.ipa
+
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: hadirku-ios-unsigned
+          path: mobile-app/ios/App/hadirku-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 14
